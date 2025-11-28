@@ -1,47 +1,60 @@
 
-  .vertical-nav {
-      min-width: 17rem;
-      width: 17rem;
+  /* Modern Sidebar Layout */
+  .vertical-nav,
+  .modern-sidebar {
+      min-width: 280px;
+      width: 280px;
       height: 100vh;
       position: fixed;
       top: 0;
       left: 0;
-      box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.1);
-      transition: all 0.4s;
-      overflow-y:auto
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 1000;
     }
     
     .page-content {
-      width: calc(100% - 17rem);
-      margin-left: 17rem;
-      transition: all 0.4s;
+      width: calc(100% - 280px);
+      margin-left: 280px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      min-height: 100vh;
     }
     
-    /* for toggle behavior */
-    
-    #sidebar.active {
-      margin-left: -17rem;
-    }
-    
-    #content.active {
-      width: 100%;
-      margin: 0;
-    }
-    
-    @media (max-width: 768px) {
-      #sidebar {
-        margin-left: -17rem;
-      }
+    /* Desktop: Sidebar toggle behavior */
+    @media (min-width: 769px) {
       #sidebar.active {
+        transform: translateX(-280px);
+      }
+      
+      #content.active {
+        width: 100%;
         margin-left: 0;
       }
+    }
+    
+    /* Mobile: Sidebar hidden by default */
+    @media (max-width: 768px) {
+      .modern-sidebar,
+      #sidebar {
+        transform: translateX(-280px);
+      }
+      
+      .modern-sidebar.active,
+      #sidebar.active {
+        transform: translateX(0);
+      }
+      
+      .page-content,
       #content {
         width: 100%;
-        margin: 0;
+        margin-left: 0;
       }
+      
       #content.active {
-        margin-left: 17rem;
-        width: calc(100% - 17rem);
+        width: 100%;
+        margin-left: 0;
       }
     }
     

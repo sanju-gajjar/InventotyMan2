@@ -1,201 +1,155 @@
-<!DOCTYPE html>
-<html lang="en">
+<%- include('header', { pageTitle: 'Stock Report' }) %>
 
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!--Custom CSS-->
-  <link rel="stylesheet" href="styles.css">
-  <!-- Semantic UI CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.13/semantic.min.css">
-  <!-- Bootstrap CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
-  <title>Stock Filter</title>
-</head>
+<main class="app-main">
+    <style>
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
 
-<body>
-  <!--Vertical Navbar-->
-  <%- include('header') %>
-   
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0;
+        }
 
-    <!-- Page content holder -->
-    <div class="page-content p-5" id="content"
-      style="background: linear-gradient(to right, #e9edf1 47%, #ff8ab3 100%);">
-      <!-- Toggle button -->
-      <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item"><a href="/">Home</a></li>
-          <li class="breadcrumb-item active" aria-current="page">Stock Filter</li>
-        </ol>
-      </nav>
-      <button id="sidebarCollapse" type="button" class="btn btn-light bg-white rounded-pill shadow-sm px-4 mb-4"><i
-          class="align justify icon"></i><small class="text-uppercase font-weight-bold">Menu</small></button>
-      <h1>Stocks Filter</h1>
-      <br>
-      <center><img class="ui large rounded image" src="stock_filter.svg"></center>
-      <br>
-      <form action="/stock_filter_query" method="POST">
-        <div class="ui three column grid">
-          <div class="row">
-            <div class="column">
-              <h3>Select Filter</h3>
-            </div>
-            <div class="column">
-              <div class="form-check form-check-inline form-switch">
-                <input class="form-check-input" type="radio" name="exampleRadios1" id="exampleRadios11" value="brand">
-                <label class="form-check-label" for="exampleRadios11">
-                  Brand
-                </label>
-              </div>
-              <div class="form-check form-check-inline form-switch">
-                <input class="form-check-input" type="radio" name="exampleRadios1" id="exampleRadios22"
-                  value="category">
-                <label class="form-check-label" for="exampleRadios22">
-                  Category
-                </label>
-              </div>
+        .filter-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
 
-            </div>
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 16px;
+            align-items: end;
+        }
 
-          </div>
-        </div>
+        .form-group {
+            margin: 0;
+        }
 
-        <br>
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+        }
 
-        <center>
-          <div class="ui left corner labeled action input">
-            <button class="ui teal button" type="submit">Apply Filter</button>
-            <div class="ui corner label">
-              <i class="asterisk icon"></i>
-            </div>
-          </div>
-        </center>
-      </form>
-      <% if (filter_type=='brand' ) { %>
-        <center>
-          <br>
-          <h2 class="text-primary">Showing Results for BRAND </h2>
-          <br>
-          <div class="ui container">
-            <div class="ui card">
-              <div class="content">
-                <div class="center aligned header"></div>
-                <div class="center aligned description">
-                  <h1 class="text-success"><i class="shopping cart icon"></i>
-                   
-                      <%= total_items %>
-                       
-                  </h1>
-                </div>
-              </div>
-              <div class="extra content">
-                <div class="center aligned author">
-                  Total Items in Stock
-                </div>
-              </div>
-            </div>
-          </div>
-          <table class="ui inverted violet table table-bordered">
-            <thead>
-              <tr class="table-success">
-                <th>Brand <i class="yelp icon"></i></th><th>Category <i class="yelp icon"></i></th>
-                <th>Stock Left<i class="cart arrow down icon"></i></th>
-                <th>Stock Value <i class="rupee sign icon"></i></th>
-              </tr>
-            </thead>
-            <tbody>
-              <% display_content.forEach(function(order){ %>
-                <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                  <td>
-                    <%= order.Brand %>
-                  </td>
-                  <td>
-                    <%= order.Category %>
-                  </td>
-                  <td>
-                    <%= order.Count %>
-                  </td>
-                  <td><i class="rupee sign icon"></i>
-                    <%= order.Amount %>
-                  </td>
-                </tr>
-                <% }); %>
-            </tbody>
-          </table>
-        </center>
-        <% } %>
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 15px;
+        }
 
-          <% if (filter_type=='category' ) { %>
-            <center>
-              <br>
-              <h2 class="text-primary">Showing Results for Filter_Type = CATEGORY </h2>
-              <br>
-              <div class="ui container">
-                <div class="ui card">
-                  <div class="content">
-                    <div class="center aligned header"></div>
-                    <div class="center aligned description">
-                      <h1 class="text-success"><i class="shopping cart icon"></i>
-                   
-                          <%= total_items %>
-                           
-                      </h1>
-                    </div>
-                  </div>
-                  <div class="extra content">
-                    <div class="center aligned author">
-                      <i class="shopping cart icon"></i> Total Items in Stock
-                    </div>
-                  </div>
-                </div>
-                <table class="ui inverted violet table table-bordered">
-                  <thead>
-                    <tr class="table-success">
-                      <th>Category <i class="list icon"></i></th>
-                      <th>Stock Left <i class="cart arrow down icon"></i></th>
-                      <th>Stock Value <i class="rupee sign icon"></i></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <% display_content.forEach(function(order){ %>
-                      <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                        <td>
-                          <%= order.Category %>
-                        </td>
-                        <td>
-                          <%= order.Count %>
-                        </td>
-                        <td><i class="rupee sign icon"></i>
-                          <%= order.Amount %>
-                        </td>
-                      </tr>
-                      <% }); %>
-                  </tbody>
-                </table>
-            </center>
-            <% } %>
+        .btn-search {
+            padding: 12px 32px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .table-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .modern-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .modern-table thead {
+            background: linear-gradient(135deg, var(--dark), var(--darker));
+        }
+
+        .modern-table th {
+            padding: 16px;
+            text-align: left;
+            color: white;
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+
+        .modern-table tbody tr {
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .modern-table td {
+            padding: 16px;
+            color: var(--gray-700);
+        }
+    </style>
+
+    <div class="page-header">
+        <h1>Stock Report</h1>
     </div>
-    <%- include('footer') %>
-    <!-- End demo content -->
-    <br>
-    <!--Semantic UI Scripts-->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.13/semantic.min.js"></script>
-    <!-- Option 1: Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-b5kHyXgcpbZJO/tY9Ul7kGkf1S0CWuKcCD38l8YkeH8z8QjE0GmW1gYU5S9FOnJ0"
-      crossorigin="anonymous"></script>
-    <script>
-      $(function () {
-        // Sidebar toggle behavior
-        $('#sidebarCollapse').on('click', function () {
-          $('#sidebar, #content').toggleClass('active');
-        });
-      });
 
-    </script>
-</body>
+    <div class="filter-card">
+        <form action="/stock_filter_query" method="POST">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">From Date</label>
+                    <input type="date" name="fromdate" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">To Date</label>
+                    <input type="date" name="todate" class="form-input" required>
+                </div>
+                <button type="submit" class="btn-search">
+                    <i class="material-icons" style="vertical-align: middle; font-size: 18px;">search</i>
+                    Search
+                </button>
+            </div>
+        </form>
+    </div>
 
-</html>
+    <% if (typeof stock_data !== 'undefined' && stock_data.length > 0) { %>
+    <div class="table-card">
+        <div class="table-responsive">
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th>Item ID</th>
+                        <th>Item Name</th>
+                        <th>Category</th>
+                        <th>Brand</th>
+                        <th>Amount</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% stock_data.forEach(function(item){ %>
+                    <tr>
+                        <td><strong><%= item.ItemID %></strong></td>
+                        <td><%= item.ItemName %></td>
+                        <td><%= item.Category %></td>
+                        <td><%= item.Brand %></td>
+                        <td>₹<%= item.Amount %></td>
+                        <td><%= item.StockDate %></td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <% } %>
+</main>
+
+<%- include('footer') %>

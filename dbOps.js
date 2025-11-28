@@ -1,7 +1,3 @@
-const {
-    connectToMongo
-} = require('./db/db');
-connectToMongo();
 function getUserRole(req) {
     const user = req.cookies.user;
     const role = req.cookies.role;
@@ -122,6 +118,9 @@ exports.getOrderPage = function (req, callback) {
               $first: "$BillDate"
             }
           }
+        },
+        {
+          $sort: { mongoId: -1 }
         }
       ])
       .toArray((err, rows) => {

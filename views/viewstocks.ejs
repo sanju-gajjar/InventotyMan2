@@ -1,224 +1,400 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <!-- Required meta tags -->
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!--Custom CSS-->
-    <link rel="stylesheet" href="styles.css">
-    <!--Semantic-UI CSS-->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.13/semantic.min.css">
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
+<%- include('header', { pageTitle: 'View Stocks' }) %>
 
-    <title>View Stocks</title>
-  </head>
-  <body>
-     <!--Vertical Navbar-->
-  <%- include('header') %>
-  
-  <!-- End vertical navbar -->
-  
-  <!-- Page content holder -->
-  <div class="page-content p-5" id="content" style="background: linear-gradient(to right, #e9edf1 47%, #ff8ab3 100%);">
-    <!-- Toggle button -->
-      <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item"><a href="/">Home</a></li>
-          <li class="breadcrumb-item active" aria-current="page">View Stock</li>
-        </ol>
-      </nav>
-    <button id="sidebarCollapse" type="button" class="btn btn-light bg-white rounded-pill shadow-sm px-4 mb-4"><i class="align justify icon"></i><small class="text-uppercase font-weight-bold">Menu</small></button>
-  
-    <!-- Page content -->
-    <h1>Stocks Summary</h1>
-    <br>
-    <center><img class="ui medium rounded image headersvg" src="stock.svg"></center>
-    <br>
-    <form action="stocks_query" method="POST">
-      <div class="ui four column grid">
-        <div class="row">
-        <div class="column">
-        <h3>View Stock By</h3>
-        </div>
-        
-        <div class="column">
-        <div class="form-check form-check-inline form-switch">
-             <input class="form-check-input" type="radio" name="exampleRadios" id="exampleRadios2" value="brand" oninput="myFunction()">
-            <label class="form-check-label" for="exampleRadios2">
-                Brand
-            </label>
-        </div>
-        <div class="form-check form-check-inline form-switch">
-            <input class="form-check-input" type="radio" name="exampleRadios" id="exampleRadios3" value="category" oninput="myFunction()">
-            <label class="form-check-label" for="exampleRadios3">
-                Category
-            </label>
-        </div>
-        </div>
-        <div class="column">
-            <select class="form-select" aria-label="Disabled select example" id="brand" name="selected_brand" disabled>
-                <option selected>Select Brand</option>
-                <% brands.forEach(function(order){ %>
-                  <option value="<%= order.Brand %>"><%= order.Brand %></option>
-                  <% }); %>
-              </select>
-        </div>
-        <div class="column">
-            <select class="form-select" aria-label="Disabled select example" id="category" name="selected_category" disabled>
-                <option selected>Select Category</option>
-                <% categories.forEach(function(order){ %>
-                  <option name="<%= order.Category %>" value="<%= order.Category %>"><%= order.Category %></option>
-                <% }); %>
-              </select>
-        </div>
-        </div>
-        </div>
-        <br>
-        <center>
-          <div class="ui left corner labeled action input">
-            <button class="ui teal button" type="submit">Search &emsp;</button>
-            <div class="ui corner label">
-              <i class="search icon"></i>
-            </div>
-          </div>
-        </center>
-      </form>
-    <% if(filter_type == 'None') { %>  
-    <table class="ui inverted violet table table-bordered">
-        <thead>
-        <tr>
-            <th>Item ID</th>
-            <th>Item Name</th>
-            <th>Category</th>
-            <th>Brand Name</th>
-            <th>Size</th>
-            <th>Amount</th>
-            <th>Date Entered</th>
-            <th>Time Entered</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        <% all_stocks.forEach(function(order){ %>
-            <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                <td><%= order.ItemID %>
-                <td><%= order.ItemName %></td>
-                <td><%= order.Category %></td>
-                <td><%= order.Brand %></td>
-                <td><%= order.Size %></td>
-                <td><%= order.Amount %></td>
-                <td><%= order.StockDate %></td>
-                <td><%= order.StockTime %>&emsp;<form action="/deletestock" method="POST">
-                </td><td>
-                  <input type="hidden" name="deleteid" value="<%= order.ItemID %>"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form></td>
-                <!-- <form action="/deleteitem" method="POST"><input type="hidden" name="deleteid" value="<%= order.TransactionID %>"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form> -->
-            </tr>
-        <% }); %>
-    </tbody>
-    </table>
-    <% } %> 
+<main class="app-main">
+    <style>
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
 
-    <% if(filter_type == 'brand') { %>
-      <br>  
-      <h2 class="text-primary">Showing Stocks for <%= filter_name %>  </h2>
-      <br>
-      <table class="ui inverted violet table table-bordered">
-          <thead>
-          <tr>
-              <th>Item ID</th>
-              <th>Item Name</th>
-              <th>Category</th>
-              <th>Brand Name</th>
-              <th>Size</th>
-              <th>Amount</th>
-              <th>Date Entered</th>
-              <th>Time Entered</th>
-          </tr>
-      </thead>
-      <tbody>
-          <% display_content.forEach(function(order){ %>
-              <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                  <td><%= order.ItemID %>
-                  <td><%= order.ItemName %></td>
-                  <td><%= order.Category %></td>
-                  <td><%= order.Brand %></td>
-                  <td><%= order.Size %></td>
-                  <td><%= order.Amount %></td>
-                  <td><%= order.StockDate %></td>
-                  <td><%= order.StockTime %>&emsp;<form action="/deletestock" method="POST"><input type="hidden" name="deleteid" value="<%= order.ItemID %>"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form></td>
-                  <!-- <form action="/deleteitem" method="POST"><input type="hidden" name="deleteid" value="<%= order.TransactionID %>"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form> -->
-              </tr>
-          <% }); %>
-      </tbody>
-      </table>
-      <% } %> 
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0 0 8px 0;
+        }
 
-      <% if(filter_type == 'category') { %>
-        <br>  
-        <h2 class="text-primary">Showing Stocks for <%= filter_name %>  </h2>
-        <br>
-        <table class="ui inverted violet table table-bordered">
-            <thead>
-            <tr>
-                <th>Item ID</th>
-                <th>Item Name</th>
-                <th>Category</th>
-                <th>Brand Name</th>
-                <th>Size</th>
-                <th>Amount</th>
-                <th>Date Entered</th>
-                <th>Time Entered</th>
-            </tr>
-        </thead>
-        <tbody>
-            <% display_content.forEach(function(order){ %>
-                <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                    <td><%= order.ItemID %>
-                    <td><%= order.ItemName %></td>
-                    <td><%= order.Category %></td>
-                    <td><%= order.Brand %></td>
-                    <td><%= order.Size %></td>
-                    <td><%= order.Amount %></td>
-                    <td><%= order.StockDate %></td>
-                    <td><%= order.StockTime %>&emsp;<form action="/deletestock" method="POST"><input type="hidden" name="deleteid" value="<%= order.ItemID %>"><button type="submit" class="btn btn-danger btn-sm">Delete</button></form></td>
-                    
-                </tr>
-            <% }); %>
-        </tbody>
-        </table>
-        <% } %> 
+        .page-header p {
+            color: var(--gray-500);
+            margin: 0;
+        }
 
+        /* Filter Card */
+        .filter-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .filter-header i {
+            font-size: 24px;
+            color: var(--primary);
+        }
+
+        .filter-header h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--dark);
+            margin: 0;
+        }
+
+        .filter-options {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-radio {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .filter-radio input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .filter-radio label {
+            font-weight: 500;
+            color: var(--dark);
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .filter-selects {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 16px;
+            align-items: end;
+        }
+
+        .form-group {
+            margin: 0;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+            font-size: 14px;
+            display: block;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 15px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+        .form-select:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-select:disabled {
+            background: var(--gray-100);
+            cursor: not-allowed;
+        }
+
+        .btn-search {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-search:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Table Card */
+        .table-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .table-header {
+            margin-bottom: 20px;
+        }
+
+        .table-header h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0;
+        }
+
+        .filter-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--primary);
+            color: white;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        .modern-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .modern-table thead {
+            background: linear-gradient(135deg, var(--dark), var(--darker));
+        }
+
+        .modern-table thead th {
+            padding: 16px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+        }
+
+        .modern-table tbody tr {
+            border-bottom: 1px solid var(--gray-200);
+            transition: all 0.3s ease;
+        }
+
+        .modern-table tbody tr:hover {
+            background: var(--light);
+        }
+
+        .modern-table tbody td {
+            padding: 16px;
+            font-size: 14px;
+            color: var(--gray-700);
+        }
+
+        .btn-delete {
+            padding: 6px 16px;
+            background: var(--danger);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-delete:hover {
+            background: #dc2626;
+            transform: scale(1.05);
+        }
+
+        .btn-edit {
+            padding: 6px 16px;
+            background: var(--info);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-edit:hover {
+            background: #2563eb;
+            transform: scale(1.05);
+            color: white;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        @media (max-width: 768px) {
+            .filter-selects {
+                grid-template-columns: 1fr;
+            }
+
+            .page-header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1>View Stocks</h1>
+        <p>Browse and manage your inventory</p>
     </div>
-    <%- include('footer') %>
-    <!-- Option 1: Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/js/bootstrap.bundle.min.js" integrity="sha384-b5kHyXgcpbZJO/tY9Ul7kGkf1S0CWuKcCD38l8YkeH8z8QjE0GmW1gYU5S9FOnJ0" crossorigin="anonymous"></script>
-    <!-- Semnatic-UI Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.13/semantic.min.js"></script>
 
-    <script>
-      $(function() {
-    // Sidebar toggle behavior
-    $('#sidebarCollapse').on('click', function() {
-      $('#sidebar, #content').toggleClass('active');
-    });
-  });
-  
-    </script>
+    <!-- Filter Card -->
+    <div class="filter-card">
+        <div class="filter-header">
+            <i class="material-icons">filter_list</i>
+            <h3>Filter Stocks</h3>
+        </div>
+
+        <form action="stocks_query" method="POST">
+            <div class="filter-options">
+                <div class="filter-radio">
+                    <input type="radio" name="exampleRadios" id="filterBrand" value="brand" onchange="toggleFilters()">
+                    <label for="filterBrand">By Brand</label>
+                </div>
+                <div class="filter-radio">
+                    <input type="radio" name="exampleRadios" id="filterCategory" value="category" onchange="toggleFilters()">
+                    <label for="filterCategory">By Category</label>
+                </div>
+            </div>
+
+            <div class="filter-selects">
+                <div class="form-group">
+                    <label class="form-label" for="brandSelect">Select Brand</label>
+                    <select class="form-select" id="brandSelect" name="selected_brand" disabled>
+                        <option selected>Choose a brand...</option>
+                        <% brands.forEach(function(order){ %>
+                        <option value="<%= order.Brand %>"><%= order.Brand %></option>
+                        <% }); %>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="categorySelect">Select Category</label>
+                    <select class="form-select" id="categorySelect" name="selected_category" disabled>
+                        <option selected>Choose a category...</option>
+                        <% categories.forEach(function(order){ %>
+                        <option value="<%= order.Category %>"><%= order.Category %></option>
+                        <% }); %>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-search">
+                    <i class="material-icons">search</i>
+                    Search
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table Card -->
+    <div class="table-card">
+        <div class="table-header">
+            <% if(filter_type == 'None') { %>
+                <h2>All Stocks</h2>
+            <% } else { %>
+                <h2>Filtered Results</h2>
+                <div class="filter-badge">
+                    <i class="material-icons" style="font-size: 16px;">filter_alt</i>
+                    <%= filter_name %>
+                </div>
+            <% } %>
+        </div>
+
+        <div class="table-responsive">
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th>Item ID</th>
+                        <th>Item Name</th>
+                        <th>Category</th>
+                        <th>Brand</th>
+                        <th>Size</th>
+                        <th>Amount</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% 
+                    const itemsToDisplay = filter_type === 'None' ? all_stocks : display_content;
+                    itemsToDisplay.forEach(function(order){ 
+                    %>
+                    <tr>
+                        <td><strong><%= order.ItemID %></strong></td>
+                        <td><%= order.ItemName %></td>
+                        <td><%= order.Category %></td>
+                        <td><%= order.Brand %></td>
+                        <td><%= order.Size %></td>
+                        <td>₹<%= order.Amount %></td>
+                        <td><%= order.StockDate %></td>
+                        <td><%= order.StockTime %></td>
+                        <td>
+                            <div class="action-buttons">
+                                <a href="/edititem?id=<%= order.ItemID %>" class="btn-edit">
+                                    <i class="material-icons" style="font-size: 14px; vertical-align: middle;">edit</i>
+                                </a>
+                                <form action="/deletestock" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this item?');">
+                                    <input type="hidden" name="deleteid" value="<%= order.ItemID %>">
+                                    <button type="submit" class="btn-delete">
+                                        <i class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
 
 <script>
+    function toggleFilters() {
+        const brandRadio = document.getElementById('filterBrand');
+        const categoryRadio = document.getElementById('filterCategory');
+        const brandSelect = document.getElementById('brandSelect');
+        const categorySelect = document.getElementById('categorySelect');
 
-  function myFunction(){
-    if (document.getElementById('exampleRadios2').checked == true){
-      document.getElementById("brand").disabled = false;
-      document.getElementById("category").disabled = true;
+        if (brandRadio.checked) {
+            brandSelect.disabled = false;
+            categorySelect.disabled = true;
+            categorySelect.value = 'Choose a category...';
+        } else if (categoryRadio.checked) {
+            brandSelect.disabled = true;
+            categorySelect.disabled = false;
+            brandSelect.value = 'Choose a brand...';
+        }
     }
-    if (document.getElementById('exampleRadios3').checked == true){
-      document.getElementById("brand").disabled = true;
-      document.getElementById("category").disabled = false;
-    }
-  }
 </script>
-  </body>
-</html>
+
+<%- include('footer') %>

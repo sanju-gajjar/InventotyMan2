@@ -86,24 +86,24 @@ async function connectToMongo() {
     });
     await client.connect();
     db = client.db(dbName);
-    console.log('Connected to MongoDB');
+    global.db = db; // Make db available globally for other modules
+    console.log('Db connected');
 }
-//connectToMongo();
 
-app.get('*', (req, res) => {
-   // getHomePage(req, (err, result) => {
-       // res.render('index.ejs', result);
-  //  });
-    res.send("Please pay your oustanding to re-enable your service, please contact your service provider for bill and payment related queries.");
-});
+// app.get('*', (req, res) => {
+//    getHomePage(req, (err, result) => {
+//        res.render('index.ejs', result);
+//    });
+//     //res.send("Please pay your oustanding to re-enable your service, please contact your service provider for bill and payment related queries.");
+// });
 app.get('/login', (req, res) => {
     let data = {
         messages: {
             error: null
         }
     };
-    res.send("Please contact service provider to complete the payment bill for resume the instance");
-    //res.send(renderTml('views/login.ejs', data))
+   // res.send("Please contact service provider to complete the payment bill for resume the instance");
+    res.send(renderTml('views/login.ejs', data))
 });
 app.get('/register', (req, res) => {
     res.render('register.ejs', {
@@ -196,11 +196,11 @@ app.post('/logout', (req, res) => {
     res.clearCookie('token');
     res.redirect('/login');
 });
-app.get('*', checkAuthenticated, (req, res) => {
-   // getHomePage(req, (err, result) => {
-       // res.render('index.ejs', result);
-  //  });
-    res.send("Please pay your oustanding to re-enable your service, please contact your service provider for bill and payment related queries.");
+app.get('/', checkAuthenticated, (req, res) => {
+   getHomePage(req, (err, result) => {
+       res.render('index.ejs', result);
+   });
+    //res.send("Please pay your oustanding to re-enable your service, please contact your service provider for bill and payment related queries.");
 });
 app.get('/orders', checkAuthenticated, (req, res) => {
     getOrderPage(req, (err, result) => {
@@ -313,6 +313,31 @@ app.post('/fetchorderitem', checkAuthenticated, (req, res) => {
         res.json(result);
     });
 })
+
+app.get('/api/order-details/:transactionId', checkAuthenticated, (req, res) => {
+    const ordersCollection = db.collection('orders');
+    const customerCollection = db.collection('customer');
+    const transactionId = decodeURIComponent(req.params.transactionId);
+
+    ordersCollection
+        .find({ TransactionID: transactionId })
+        .toArray((err, orderItems) => {
+            if (err || !orderItems || orderItems.length === 0) {
+                return res.json({ success: false, message: 'Order not found' });
+            }
+
+            const customerPhone = orderItems[0].CustomerPhone;
+            
+            customerCollection
+                .findOne({ PhoneNumber: customerPhone }, (err2, customer) => {
+                    res.json({
+                        success: true,
+                        orderItems: orderItems,
+                        customer: customer || {}
+                    });
+                });
+        });
+});
 
 app.post('/addcategory', checkAuthenticated, (req, res) => {
 
@@ -1230,6 +1255,13 @@ function chunkArray(array, chunkSize) {
     }
     return chunks;
 }
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+
+// Start server after database connection
+connectToMongo().then(() => {
+    app.listen(port, () => {
+        console.log(`Server is running on port ${port}`);
+    });
+}).catch(err => {
+    console.error('Failed to connect to MongoDB:', err);
+    process.exit(1);
 });

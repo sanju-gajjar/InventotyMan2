@@ -1,3 +1,4 @@
-// src/public/js/main.js
-const appDiv = document.getElementById('app');
-appDiv.innerHTML = '<h1></h1>';
+// Main JavaScript file for InventoryMan2
+// Add your client-side JavaScript code here
+
+console.log('InventoryMan2 loaded successfully');

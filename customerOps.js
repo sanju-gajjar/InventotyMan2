@@ -1,8 +1,5 @@
 const dbName = 'inventoryman';
-const {
-    connectToMongo
-} = require('./db/db');
-connectToMongo();
+
 function getUserRole(req) {
     const user = req.cookies.user;
     const role = req.cookies.role;
@@ -14,9 +11,9 @@ exports.getCustomer = function (req, callback) {
 
     // Basic input validation
     if (!PhoneNumber || !/^\d{10}$/.test(PhoneNumber)) {
-        res.status(400).json({
-            error: "Invalid PhoneNumber format"
-        });
+        // res.status(400).json({
+        //     error: "Invalid PhoneNumber format"
+        // });
     } else {
         async function fetchData() {
             try {

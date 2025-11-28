@@ -1,8 +1,5 @@
 const dbName = 'inventoryman';
-const {
-    connectToMongo
-} = require('./db/db');
-connectToMongo();
+
 function getUserRole(req) {
     const user = req.cookies.user;
     const role = req.cookies.role;

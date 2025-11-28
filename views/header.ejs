@@ -1,119 +1,635 @@
-<header>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Inventory Man' %> - Phoner</title>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Semantic UI (for icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.13/semantic.min.css">
+    
     <style>
-        .headersvg{
-            width: 150px !important;
-            max-width: 150px !important;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            --dark: #1e293b;
+            --darker: #0f172a;
+            --light: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --sidebar-width: 72px;
+            --sidebar-width-expanded: 280px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Sidebar Styles */
+        .app-sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(180deg, var(--dark) 0%, var(--darker) 100%);
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            overflow-y: auto;
+            overflow-x: visible;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .app-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .app-sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .app-sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        /* Sidebar Header */
+        .sidebar-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: center;
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-decoration: none;
+        }
+
+        .sidebar-logo i {
+            font-size: 32px;
+        }
+
+        .sidebar-logo-text {
+            display: none;
+        }
+
+        /* User Profile */
+        .sidebar-user {
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            position: relative;
+        }
+
+        .user-avatar:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: calc(100% + 12px);
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--dark);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+        }
+
+        .user-details {
+            display: none;
+        }
+
+        .btn-logout {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .btn-logout:hover::after {
+            content: 'Log Out';
+            position: absolute;
+            left: calc(100% + 12px);
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--dark);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+        }
+
+        .btn-logout span {
+            display: none;
+        }
+
+        .btn-logout:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        /* Navigation */
+        .sidebar-nav {
+            padding: 16px 0;
+        }
+
+        .nav-section {
+            margin-bottom: 24px;
+        }
+
+        .nav-section-title {
+            display: none;
+        }
+
+        .nav-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .nav-item {
+            margin: 2px 0;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px 0;
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-link:hover::after {
+            content: attr(data-title);
+            position: absolute;
+            left: calc(100% + 12px);
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--dark);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+        }
+
+        .nav-link span {
+            display: none;
+        }
+
+        .nav-link::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+        }
+
+        .nav-link:hover::before {
+            opacity: 1;
+        }
+
+        .nav-link.active {
+            background: rgba(102, 126, 234, 0.2);
+            color: white;
+        }
+
+        .nav-link.active::before {
+            opacity: 1;
+        }
+
+        .nav-link i {
+            font-size: 20px;
+            width: 24px;
+            text-align: center;
+        }
+
+        /* Main Content */
+        .app-main {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            padding: 24px;
+            position: relative;
+        }
+
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 1001;
+            background: white;
+            border: none;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mobile-menu-toggle i {
+            font-size: 24px;
+            color: var(--dark);
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .app-sidebar {
+                transform: translateX(-100%);
+                width: var(--sidebar-width-expanded);
+            }
+
+            .app-sidebar.active {
+                transform: translateX(0);
+            }
+
+            .app-sidebar.active .sidebar-logo {
+                gap: 12px;
+            }
+
+            .app-sidebar.active .sidebar-logo-text {
+                display: block;
+            }
+
+            .app-sidebar.active .sidebar-logo-text h1 {
+                font-size: 20px;
+                font-weight: 700;
+                margin: 0;
+            }
+
+            .app-sidebar.active .sidebar-logo-text p {
+                font-size: 12px;
+                margin: 0;
+                opacity: 0.9;
+            }
+
+            .app-sidebar.active .sidebar-header {
+                justify-content: flex-start;
+                padding: 24px;
+            }
+
+            .app-sidebar.active .user-info {
+                gap: 12px;
+                justify-content: flex-start;
+            }
+
+            .app-sidebar.active .user-details {
+                display: block;
+            }
+
+            .app-sidebar.active .user-details h4 {
+                font-size: 16px;
+                font-weight: 600;
+                color: white;
+                margin: 0;
+                text-transform: capitalize;
+            }
+
+            .app-sidebar.active .user-details p {
+                font-size: 13px;
+                color: rgba(255, 255, 255, 0.7);
+                margin: 0;
+            }
+
+            .app-sidebar.active .sidebar-user {
+                padding: 20px 24px;
+                align-items: stretch;
+            }
+
+            .app-sidebar.active .btn-logout {
+                width: 100%;
+                padding: 10px;
+                gap: 8px;
+            }
+
+            .app-sidebar.active .btn-logout span {
+                display: inline;
+            }
+
+            .app-sidebar.active .nav-section-title {
+                display: block;
+                padding: 8px 24px;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                color: rgba(255, 255, 255, 0.5);
+            }
+
+            .app-sidebar.active .nav-link {
+                padding: 12px 24px;
+                justify-content: flex-start;
+                gap: 12px;
+            }
+
+            .app-sidebar.active .nav-link span {
+                display: inline;
+            }
+
+            .app-sidebar.active .nav-link:hover::after {
+                display: none;
+            }
+
+            .app-main {
+                margin-left: 0;
+                padding: 80px 16px 24px;
+            }
+
+            .mobile-menu-toggle {
+                display: flex;
+            }
+
+            .sidebar-overlay.active {
+                display: block;
+                opacity: 1;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .app-sidebar {
+                transform: translateX(0);
+            }
         }
     </style>
-    <script src="/js/bundle.js"></script>
-<div class="vertical-nav bg-white" id="sidebar">
-    <div class="py-4 px-3 mb-4" style="background: linear-gradient(to top, #0066eb 0%, #ff8ab3 68%);">
-        <div class="media d-flex align-items-center"><img src="admin.svg" alt="..." width="65"
-                class="mr-3 rounded-circle img-thumbnail shadow-sm">
-            &emsp;<div class="media-body">
-                <h4 class="m-0">
-                    <p class="text-white"><shop-name>
-                </h4>
-                <p class="font-weight-light text-white mb-0">Hi, <%= user.user %></p>
-                <p class="font-weight-light text-white mb-0">Ver: 1.0.6.4</p>
-            </div>
+</head>
+<body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobileMenuBtn">
+        <i class="material-icons">menu</i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar -->
+    <aside class="app-sidebar" id="appSidebar">
+        <!-- Sidebar Header -->
+        <div class="sidebar-header">
+            <a href="/" class="sidebar-logo">
+                <i class="material-icons">inventory_2</i>
+                <div class="sidebar-logo-text">
+                    <h1>Inventory Man</h1>
+                    <p>Phoner - The Cycle Hub</p>
+                </div>
+            </a>
         </div>
-    </div>
-    <form action="/logout?_method=DELETE" method="POST">
-        <center><button type="submit" class="btn btn-danger">
-                <p class="text-white">Log Out</p>
-            </button></center>
-    </form>
-    <h5 class="ui horizontal divider header text-primary">
-        MAIN
-    </h5>
 
-    <ul class="nav flex-column bg-white mb-0">
-        <li class="nav-item">
-            <a href="/" class="nav-link text-dark font-italic">
-                <i class="home icon"></i>
-                Dashboard
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="/billing" class="nav-link text-dark font-italic">
-                <p><i class="rupee sign icon"></i>
-                    Bill
-                </p>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="/viewstocks" class="nav-link text-dark font-italic">
-                <i class="tags icon"></i>
-                View Stocks
-            </a>
-        </li>
-    <% if (user.role==='admin' ) { %>
-        <li class="nav-item">
-            <a href="/orders" class="nav-link text-dark font-italic">
-                <i class="eye icon"></i>
-                View Orders
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="/stocks" class="nav-link text-dark font-italic">
-                <i class="plus circle icon"></i>
-                Add Stock
-            </a>
-        </li>
-<% } %>
-    </ul>
+        <!-- User Profile -->
+        <% if (typeof user !== 'undefined' && user && user.user) { %>
+        <div class="sidebar-user">
+            <div class="user-info">
+                <div class="user-avatar" data-tooltip="<%= user.user %> (<%= user.role === 'admin' ? 'Admin' : 'User' %>)">
+                    <%= user.user.charAt(0).toUpperCase() %>
+                </div>
+                <div class="user-details">
+                    <h4><%= user.user %></h4>
+                    <p><%= user.role === 'admin' ? 'Administrator' : 'User' %></p>
+                </div>
+            </div>
+            <form action="/logout?_method=DELETE" method="POST">
+                <button type="submit" class="btn-logout">
+                    <i class="material-icons" style="font-size: 18px;">logout</i>
+                    <span>Log Out</span>
+                </button>
+            </form>
+        </div>
+        <% } %>
 
-    <h5 class="ui horizontal divider header text-primary">
-        CUSTOMIZE
-    </h5>
-<% if (user.role==='admin' ) { %>
-    <ul class="nav flex-column bg-white mb-0">
-        <li class="nav-item">
-            <a href="/brands" class="nav-link text-dark font-italic">
-                <i class="yelp icon"></i>
-                Brand
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="/categories" class="nav-link text-dark font-italic">
-                <i class="bookmark icon"></i>
-                Category
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="/viewbarcodepage" class="nav-link text-dark font-italic">
-                <i class="check square icon"></i>
-                BarCode Gen
-            </a>
-        </li>
-    </ul>
-<% } %>
-    <% if (user.role==='admin' ) { %>
-    <h5 class="ui horizontal divider header text-primary">
-        FILTERS
-    </h5>
+        <!-- Navigation -->
+        <nav class="sidebar-nav">
+            <!-- Main Section -->
+            <div class="nav-section">
+                <div class="nav-section-title">Main</div>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link" data-page="/" data-title="Dashboard">
+                            <i class="material-icons">dashboard</i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/billing" class="nav-link" data-page="/billing" data-title="Billing">
+                            <i class="material-icons">receipt_long</i>
+                            <span>Billing</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/viewstocks" class="nav-link" data-page="/viewstocks" data-title="View Stocks">
+                            <i class="material-icons">inventory</i>
+                            <span>View Stocks</span>
+                        </a>
+                    </li>
+                    <% if (typeof user !== 'undefined' && user && user.role === 'admin') { %>
+                    <li class="nav-item">
+                        <a href="/orders" class="nav-link" data-page="/orders" data-title="Orders">
+                            <i class="material-icons">shopping_cart</i>
+                            <span>Orders</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/stocks" class="nav-link" data-page="/stocks" data-title="Add Stock">
+                            <i class="material-icons">add_circle</i>
+                            <span>Add Stock</span>
+                        </a>
+                    </li>
+                    <% } %>
+                </ul>
+            </div>
 
-    <ul class="nav flex-column bg-white mb-0">
-        <li class="nav-item">
-            <a href="/sales_filter" class="nav-link text-dark font-italic">
-                <i class="yelp icon"></i>
-                Sales
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="/stock_filter" class="nav-link text-dark font-italic">
-                <i class="lock icon"></i>
-                Stock
-            </a>
-        </li>
-        <li class="nav-item">
-            <a href="/backup" class="nav-link text-dark font-italic">
-                <i class="download icon"></i>
-                Back Up
-            </a>
-        </li>
-    </ul>
-    <% } %>
-</div>
-</header>
+            <!-- Management Section -->
+            <% if (typeof user !== 'undefined' && user && user.role === 'admin') { %>
+            <div class="nav-section">
+                <div class="nav-section-title">Management</div>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/brands" class="nav-link" data-page="/brands" data-title="Brands">
+                            <i class="material-icons">label</i>
+                            <span>Brands</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/categories" class="nav-link" data-page="/categories" data-title="Categories">
+                            <i class="material-icons">category</i>
+                            <span>Categories</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/viewbarcodepage" class="nav-link" data-page="/viewbarcodepage" data-title="Barcode Generator">
+                            <i class="material-icons">qr_code</i>
+                            <span>Barcode Generator</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Reports Section -->
+            <div class="nav-section">
+                <div class="nav-section-title">Reports</div>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/sales_filter" class="nav-link" data-page="/sales_filter" data-title="Sales Report">
+                            <i class="material-icons">point_of_sale</i>
+                            <span>Sales Report</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/stock_filter" class="nav-link" data-page="/stock_filter" data-title="Stock Report">
+                            <i class="material-icons">assessment</i>
+                            <span>Stock Report</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/backup" class="nav-link" data-page="/backup" data-title="Backup">
+                            <i class="material-icons">backup</i>
+                            <span>Backup</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <% } %>
+        </nav>
+    </aside>
+
+    <script>
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const appSidebar = document.getElementById('appSidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+        if (mobileMenuBtn) {
+            mobileMenuBtn.addEventListener('click', function() {
+                appSidebar.classList.toggle('active');
+                sidebarOverlay.classList.toggle('active');
+            });
+        }
+
+        if (sidebarOverlay) {
+            sidebarOverlay.addEventListener('click', function() {
+                appSidebar.classList.remove('active');
+                sidebarOverlay.classList.remove('active');
+            });
+        }
+
+        // Highlight active nav link
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentPath = window.location.pathname;
+            document.querySelectorAll('.nav-link').forEach(link => {
+                if (link.getAttribute('data-page') === currentPath) {
+                    link.classList.add('active');
+                }
+            });
+
+            // Auto-close sidebar on mobile after link click
+            if (window.innerWidth <= 768) {
+                document.querySelectorAll('.nav-link').forEach(link => {
+                    link.addEventListener('click', function() {
+                        appSidebar.classList.remove('active');
+                        sidebarOverlay.classList.remove('active');
+                    });
+                });
+            }
+        });
+    </script>

@@ -1,92 +1,133 @@
-<div class="modal fade" style="width: 1200px; font-size: 10px;" id="exampleModal" tabindex="-1"
-    aria-labelledby="exampleModalLabel" aria-hidden="true">
-    <div class="modal-dialog" style="width: 850px;">
-        <div class="modal-content" style="width: 850px;">
-            <div class="modal-header" style="width: 850px;">
-                <h1 class="modal-title" id="exampleModalLabel">Updating Order by <%= user.user %>
-                </h1>
-            </div>
-            <div class="modal-body" style="width: 850px;">
-                <div class="mb-3">
-                    <form action="/edititem" method="POST">
-                        <table class="ui inverted pink celled table tbl_code_with_mark" id="orderTable">
-                            <thead>
-                                <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                                    <th>Item ID</th>
-                                    <th></th>
-                                    <th>Date</th>
-                                    <th>Item Name</th>
-                                    <th>Category</th>
-                                    <th>Brand</th>
-                                    <th>Quantity</th>
-                                    <th>Price</th>
-                                   
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                                    <td>
-                                        <input type="text" name="itemID" id="itemID" value="<%= orderData.ItemID %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" hidden name="transactionID" id="transactionID" value="<%= orderData.TransactionID %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="billDate" id="billDate" value="<%= orderData.BillDate %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="itemName" id="itemName"
-                                            value="<%= orderData.ItemName %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="category" id="category"
-                                            value="<%= orderData.Category %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="brand" id="brand" value="<%= orderData.Brand %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="size" id="size" value="<%= orderData.Size %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="price" id="price" value="<%= orderData.Price %>">
-                                    </td>
-                                    </tr>
-                            </tbody>
-                        </table>
-                        <table class="ui inverted pink celled table tbl_code_with_mark" id="orderTable">
-                            <thead>
-                                <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                                    <th>Customer Name</th>
-                                    <th></th>
-                                    <th>Customer Phone</th>
-                                    <th>Customer Email</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                               
-                                <tr style="background: linear-gradient(to left, #0066eb 0%, #ff8ab3 68%);">
-                                    <td>
-                                        <input type="text" name="customerName" id="customerName" value="<%= customerData.CustomerName %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="id" id="id" value="<%= customerData._id %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="customerPhone" id="customerPhone" value="<%= customerData.PhoneNumber %>">
-                                    </td>
-                                    <td>
-                                        <input type="text" name="customerEmail" id="customerEmail" value="<%= customerData.Email %>">
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+<%- include('header', { pageTitle: 'Edit Item' }) %>
+
+<main class="app-main">
+    <style>
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0;
+        }
+
+        .form-card {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 0;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 15px;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+    </style>
+
+    <div class="page-header">
+        <h1>Edit Order - Item #<%= orderData.ItemID %></h1>
+    </div>
+
+    <div class="form-card">
+        <h3 style="margin-bottom: 20px; color: var(--dark); font-weight: 600;">Order Information</h3>
+        <form action="/edititem" method="POST">
+            <input type="hidden" name="itemID" value="<%= orderData.ItemID %>">
+            <input type="hidden" name="transactionID" value="<%= orderData.TransactionID %>">
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Item ID</label>
+                    <input type="text" name="itemID" class="form-input" value="<%= orderData.ItemID %>" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Bill Date</label>
+                    <input type="text" name="billDate" class="form-input" value="<%= orderData.BillDate %>" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Item Name</label>
+                    <input type="text" name="itemName" class="form-input" value="<%= orderData.ItemName %>" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <input type="text" name="category" class="form-input" value="<%= orderData.Category %>" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Brand</label>
+                    <input type="text" name="brand" class="form-input" value="<%= orderData.Brand %>" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Size</label>
+                    <input type="text" name="size" class="form-input" value="<%= orderData.Size %>" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Price</label>
+                    <input type="number" step="0.01" name="price" class="form-input" value="<%= orderData.Price %>" required>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="submit" class="btn btn-primary" value="Hello">Submit</button>
-                </form>
+
+            <h3 style="margin: 32px 0 20px; color: var(--dark); font-weight: 600;">Customer Information</h3>
+            <input type="hidden" name="id" value="<%= customerData._id %>">
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Customer Name</label>
+                    <input type="text" name="customerName" class="form-input" value="<%= customerData.CustomerName %>" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Customer Phone</label>
+                    <input type="text" name="customerPhone" class="form-input" value="<%= customerData.PhoneNumber %>" required>
+                </div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label class="form-label">Customer Email</label>
+                    <input type="email" name="customerEmail" class="form-input" value="<%= customerData.Email %>" required>
+                </div>
             </div>
-        </div>
+
+            <button type="submit" class="btn-submit">Update Order</button>
+        </form>
     </div>
-</div>
+</main>
+
+<%- include('footer') %>

@@ -1,152 +1,277 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!--Custom CSS-->
-  <link rel="stylesheet" href="styles.css">
-  <!-- Semantic UI CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.13/semantic.min.css">
-  <!-- Bootstrap CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
-  <title>Phoner - The Cycle Hub</title>
-</head>
-<body>
-  <!--Vertical Navbar-->
-  <%- include('header') %>  
-  <!-- Page content holder -->
-  <div class="page-content p-5" id="content" style="background: linear-gradient(to right, #e9edf1 47%, #ff8ab3 100%);">
-    <!-- Toggle button -->
-      <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item"><a href="/">Home</a></li>
-          <li class="breadcrumb-item active" aria-current="page">Dashboard</li>
-        </ol>
-      </nav>
-    <button id="sidebarCollapse" type="button" class="btn btn-light bg-white rounded-pill shadow-sm px-4 mb-4"><i class="align justify icon"></i><small class="text-uppercase font-weight-bold">Menu</small></button>
-  
-    <!-- Page content -->
-    
-    <br>
-    <h1>Dashboard</h1>
-    <br>
-    <center><img class="ui large rounded image headersvg" src="dashboard.svg"></center>
-    <br>
-    <br>
-    <br>
-    <div class="fluid container">
-    <div class="ui four column grid">
-      <div class="col-sm-6">
-        <div class="ui fluid card text-white bg-success">
-         
-          <div class="content">
-            <center>
-            <div class="ui statistic">
-                <div class="value">
-                  <p class="text-white">
-                  <span>&#8377;</span>
-                 <% total_sales.forEach(function(order){ %>
-                    <%= Math.round(order.TotalItemsOrdered) %>
-                  <% }); %>
-                </p>
-                </div>
-                <div class="label">
-                  Total Sales
-                </div>
-            </div>
-          </center>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6">
-        <div class="ui fluid card text-white bg-primary">
-          
-          <div class="fluid content">
-            <center>
-            <div class="ui statistic">
-              <div class="value">
-                <p class="text-white">
-                  <i class="shopping cart icon"></i><% ord_num.forEach(function(order){ %>
-                  <%= order.NumberOfProducts %>
-                <% }); %>
-                </p>
-              </div>
-              <div class="label">
-                Total Orders
-              </div>
-            </div>
-          </center>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6">
-        <div class="ui fluid card text-dark bg-warning">
-          <div class="content">
-            <center>
-            <div class="ui statistic">
-              <div class="value">
-                <p class="text-white">
-                  <i class="tags icon"></i><% stock_num.forEach(function(order){ %>
-                  <%= order.NumberOfProducts %>
-                <% }); %>
-                </p>
-              </div>
-              <div class="label">
-                Total Stock
-              </div>
-            </div>
-          </center>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6">
-        <div class="ui fluid card text-white bg-info">
-          
-          <div class="fluid content">
-            <center>
-            <div class="ui statistic">
-              <div class="value">
-                <p class="text-white">
-                  <i class="rupee sign icon"></i><% total_stock.forEach(function(order){ %>
-                  <%= order.TotalItemsOrdered %>
-                <% }); %>
-                </p>
-              </div>
-              <div class="label">
-                Total Stock Value
-              </div>
-            </div>
-          </center>
-          </div>
-        </div>
-      </div>
+<%- include('header', { pageTitle: 'Dashboard' }) %>
+
+<main class="app-main">
+    <style>
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .page-header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0 0 8px 0;
+        }
+
+        .page-header p {
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--card-color), var(--card-color-dark));
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card.success {
+            --card-color: var(--success);
+            --card-color-dark: #059669;
+        }
+
+        .stat-card.primary {
+            --card-color: var(--primary);
+            --card-color-dark: var(--primary-dark);
+        }
+
+        .stat-card.warning {
+            --card-color: var(--warning);
+            --card-color-dark: #d97706;
+        }
+
+        .stat-card.info {
+            --card-color: var(--info);
+            --card-color-dark: #2563eb;
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .stat-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--card-color), var(--card-color-dark));
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-icon i {
+            font-size: 28px;
+            color: white;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--dark);
+            line-height: 1;
+            margin: 0;
+        }
+
+        .stat-currency {
+            font-size: 24px;
+            color: var(--gray-400);
+            margin-right: 4px;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .quick-actions h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0 0 20px 0;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: var(--light);
+            border: 2px solid transparent;
+            border-radius: 12px;
+            text-decoration: none;
+            color: var(--dark);
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: white;
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .action-btn i {
+            font-size: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .action-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1>Dashboard</h1>
+        <p>Welcome back, <%= user.user %>! Here's your business overview.</p>
     </div>
-  </div>
-  </div>
-  <%- include('footer') %>
-  <!-- End demo content -->
-  
-  
-  
-  <br>
- 
-  
-  <!--Semantic UI Scripts-->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.13/semantic.min.js"></script>
-  <!-- Option 1: Bootstrap Bundle with Popper -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/js/bootstrap.bundle.min.js" integrity="sha384-b5kHyXgcpbZJO/tY9Ul7kGkf1S0CWuKcCD38l8YkeH8z8QjE0GmW1gYU5S9FOnJ0" crossorigin="anonymous"></script>
-  <script>
-        $(function() {
-      // Sidebar toggle behavior
-      $('#sidebarCollapse').on('click', function() {
-        $('#sidebar, #content').toggleClass('active');
-      });
-    });
 
-  </script>
-</body>
-</html>
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+        <!-- Total Sales -->
+        <div class="stat-card success">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-label">Total Sales</div>
+                    <h3 class="stat-value">
+                        <span class="stat-currency">₹</span><% total_sales.forEach(function(order){ %><%= Math.round(order.TotalItemsOrdered) %><% }); %>
+                    </h3>
+                </div>
+                <div class="stat-icon">
+                    <i class="material-icons">trending_up</i>
+                </div>
+            </div>
+        </div>
 
+        <!-- Total Orders -->
+        <div class="stat-card primary">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-label">Total Orders</div>
+                    <h3 class="stat-value">
+                        <% ord_num.forEach(function(order){ %><%= order.NumberOfProducts %><% }); %>
+                    </h3>
+                </div>
+                <div class="stat-icon">
+                    <i class="material-icons">shopping_cart</i>
+                </div>
+            </div>
+        </div>
 
+        <!-- Total Stock -->
+        <div class="stat-card warning">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-label">Total Stock</div>
+                    <h3 class="stat-value">
+                        <% stock_num.forEach(function(order){ %><%= order.NumberOfProducts %><% }); %>
+                    </h3>
+                </div>
+                <div class="stat-icon">
+                    <i class="material-icons">inventory_2</i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stock Value -->
+        <div class="stat-card info">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-label">Stock Value</div>
+                    <h3 class="stat-value">
+                        <span class="stat-currency">₹</span><% total_stock.forEach(function(order){ %><%= order.TotalItemsOrdered %><% }); %>
+                    </h3>
+                </div>
+                <div class="stat-icon">
+                    <i class="material-icons">account_balance_wallet</i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-grid">
+            <a href="/billing" class="action-btn">
+                <i class="material-icons">receipt_long</i>
+                New Bill
+            </a>
+            <a href="/viewstocks" class="action-btn">
+                <i class="material-icons">inventory</i>
+                View Stocks
+            </a>
+            <% if (user.role === 'admin') { %>
+            <a href="/stocks" class="action-btn">
+                <i class="material-icons">add_circle</i>
+                Add Stock
+            </a>
+            <a href="/orders" class="action-btn">
+                <i class="material-icons">shopping_cart</i>
+                View Orders
+            </a>
+            <% } %>
+        </div>
+    </div>
+</main>
+
+<%- include('footer') %>
