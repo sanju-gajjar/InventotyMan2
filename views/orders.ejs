@@ -2,7 +2,6 @@
 
 <main class="app-main">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         .page-header {
             background: white;
@@ -106,50 +105,73 @@
     </style>
 
     <div class="page-header">
-        <h1>Orders</h1>
+      <h1>Orders</h1>
     </div>
 
     <div class="table-card">
-        <div class="table-responsive">
-            <table class="modern-table">
-                <thead>
-                    <tr>
-                        <th>Order ID</th>
-                        <th>Customer</th>
-                        <th>Phone</th>
-                        <th>Total Amount</th>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% orders.forEach(function(order){ 
-                        // Find customer info by phone number
-                        const customer = customerInfo ? customerInfo.find(c => c.PhoneNumber === order.CustomerPhone) : null;
-                        const customerName = customer ? customer.CustomerName : 'N/A';
-                    %>
-                    <tr>
-                        <td><strong>#<%= order._id %></strong></td>
-                        <td><%= customerName %></td>
-                        <td><%= order.CustomerPhone %></td>
-                        <td>₹<%= order.Amount %></td>
-                        <td><%= order.BillDate %></td>
-                        <td><%= order.TransactionTime %></td>
-                        <td>
-                            <div class="action-buttons">
-                                <a href="/edititem?edititemid=<%= order.mongoId %>" class="btn-view">View Details</a>
-                                <button onclick="downloadInvoice('<%= order._id %>')" class="btn-download">
-                                    <i class="material-icons" style="font-size: 16px;">download</i>
-                                    PDF
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    <% }); %>
-                </tbody>
-            </table>
+      <form method="GET" action="/orders" style="margin-bottom: 20px; display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
+        <div>
+          <label for="customer">Customer Name</label>
+          <input type="text" name="customer" id="customer" value="<%= searchCustomer || '' %>" placeholder="Search by name">
         </div>
+        <div>
+          <label for="phone">Phone Number</label>
+          <input type="text" name="phone" id="phone" value="<%= searchPhone || '' %>" placeholder="Exact phone">
+        </div>
+        <div>
+          <label for="order">Order Number</label>
+          <input type="text" name="order" id="order" value="<%= searchOrder || '' %>" placeholder="Order number">
+        </div>
+        <button type="submit" class="btn-download">Search</button>
+      </form>
+      <div class="table-responsive">
+        <table class="modern-table">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Customer</th>
+              <th>Phone</th>
+              <th>Total Amount</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% orders.forEach(function(order){ 
+              const customer = customerInfo ? customerInfo.find(c => c.PhoneNumber === order.CustomerPhone) : null;
+              const customerName = customer ? customer.CustomerName : 'N/A';
+            %>
+            <tr>
+              <td><strong>#<%= order._id %></strong></td>
+              <td><%= customerName %></td>
+              <td><%= order.CustomerPhone %></td>
+              <td>₹<%= order.Amount %></td>
+              <td><%= order.BillDate %></td>
+              <td><%= order.TransactionTime %></td>
+              <td>
+                <div class="action-buttons">
+                  <a href="/edititem?edititemid=<%= order.mongoId %>" class="btn-view">View Details</a>
+                  <button onclick="downloadInvoice('<%= order._id %>')" class="btn-download">
+                    <i class="material-icons" style="font-size: 16px;">download</i>
+                    PDF
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top: 24px; display: flex; justify-content: center; gap: 12px;">
+        <% if (page > 1) { %>
+          <a href="/orders?page=<%= page - 1 %>&customer=<%= searchCustomer %>&phone=<%= searchPhone %>&order=<%= searchOrder %>" class="btn-download">Previous</a>
+        <% } %>
+        <span style="padding: 8px 16px; background: var(--gray-100); border-radius: 8px; font-weight: 600;">Page <%= page %></span>
+        <% if (orders.length === pageSize) { %>
+          <a href="/orders?page=<%= page + 1 %>&customer=<%= searchCustomer %>&phone=<%= searchPhone %>&order=<%= searchOrder %>" class="btn-download">Next</a>
+        <% } %>
+      </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-1.9.1.min.js"></script>
@@ -242,12 +264,6 @@
         }
 
         function getSampleData(tID) {
-          // Check if html2pdf is loaded
-          if (typeof html2pdf === 'undefined') {
-            alert('PDF library not loaded. Please refresh the page and try again.');
-            return;
-          }
-
           var totalAmount = 0.0;
           var wordsMatter = 0.0;
           var email = "";
@@ -260,17 +276,10 @@
             success: function (data) {
               console.log('Fetch order item response:', data);
               if (data.status == 200 && data.rows.length > 0) {
-                var date_format = new Date();
-                var transaction_time = date_format.getHours() + ':' + date_format.getMinutes() + ':' + date_format.getSeconds();
-                var transaction_date = date_format.getDate() + '/' + (
-                  parseInt(date_format.getMonth() + 1)
-                ).toString() + '/' + date_format.getFullYear();
                 const transaction_id = data.rows[0].TransactionID;
                 var items_arr = []
                 for (var i = 0; i < data.rows.length; i++) {
-                  var disc = data.rows[i].Discount == null
-                    ? 0.0
-                    : data.rows[i].Discount;
+                  var disc = data.rows[i].Discount == null ? 0.0 : data.rows[i].Discount;
                   if (isNaN(disc)) {
                     disc = 0.0;
                   }
@@ -287,7 +296,6 @@
                   }
                   email = data.rows[0].CustomerEmail;
                   totalAmount = parseFloat(parseFloat(totalAmount) + data.rows[i].Amount).toFixed(2);
-                  console.log("inWordsTotalAmount 1", wordsMatter);
                   wordsMatter = convertNumberToWords(totalAmount.toString().split('.')[0]);
                   wordsMatter = wordsMatter + "And ";
                   wordsMatter = wordsMatter + (
@@ -295,61 +303,40 @@
                       ? convertNumberToWords(totalAmount.toString().split('.')[1])
                       : "Zero"
                   );
-                  console.log("inWordsTotalAmount 2", wordsMatter);
                   items_arr.push(item_obj)
                 }
-                var html = `<!DOCTYPE html><html lang="en"><head>   <meta charset="UTF-8">   <meta name="viewport" content="width=device-width, initial-scale=1.0">   <title>RETAIL INVOICE</title>   <style>      body {         font-family: Arial, sans-serif;         font-size: 13px;      }      table {         width: 100%;         border-collapse: collapse;      }      th,      td {         border: 1px solid#000;         padding: 8px;      }      th {         text-align: center;         background-color: #e7e7e7;      }      h1 {         margin: 0;         padding: 0;      }      .header h1 {         text-decoration: underline;      }      .header {         float: left;      }      .logo {         width: 100px;      }      .address {         font-size: 14px;         margin-top: 4px;      }      .invoice-details {         text-align: right;      }      .invoice-details table {         border: none;      }      h2 {         text-align: center;      }      .invoice-details {         float: right;         text-align: right;         margin-right: 0px;         margin-bottom: 5px;      }      .invoice-details table {         border: none;      }      .invoice-summary-footer {         display: inline-block;         width: 100%;      }      .invoice-details th {         text-align: left;      }      .invoice-summary {         float: right;         text-align: right;      }      .invoice-summary table td {         border: none;         text-align: right;      }      .footer {         float: left;         text-align: left;      }      .payment-details {         margin-left: 20px;      }      .main_wrapper {         width: 900px;         margin: 0px auto;      }      tfoot tr td:first-child {         background-color: #fff      }      tfoot tr td {         background-color: #e7e7e7;      }      .info-table {         width: 100%;         margin-bottom: 5px;      }      .info-table th {         text-align: left;         background-color: transparent;         font-weight: normal;      }      .info-table td {         padding: 4px 8px;      }      .customer-info {         width: 100%;         margin-bottom: 5px;         border: 1px solid;      }      .customer-info th,      .customer-info td {         padding: 4px;      }      .customer-info th {         text-align: left;         width: 100px;         background-color: transparent;         border: none;         font-weight: normal;      }      .customer-info td {         width: 41%;         border: none;      }   </style></head><body>   <div class="main_wrapper">      <div class="header">         <!--<img src="%logo%"alt="Vishwesh Logo"class="logo"><br>-->         <h1><strong>THE CYCLE HUB</strong></h1>         <span><strong>THE PHONER MOBILE ACCESSORIES HUB</strong></span><br>         <div class="address"><strong>Address:</strong>Shop No:G-101,B.T.Mall,Navjivan Mall            Compound,Kalol-382721<br>DIST-GANDHINAGAR,<strong>Contact No:</strong>9714621020</div>      </div>      <div class="invoice-details">         <table>            <tr>               <th>Invoice No:</th>               <td>{{number}}</td>            </tr>            <tr>               <th><strong>Invoice Date:</strong></th>               <td>{{date}}</td>            </tr>            <tr>               <th><strong>State code:</strong></th>               <td>24</td>            </tr>            <tr>               <th><strong>GSTN No:</strong></th>               <td>24BNYPG4010L1ZU</td>            </tr>         </table>      </div>      <h3>RETAIL INVOICE</h3>      <table class="customer-info">         <tr>            <th>Name:</th>            <td>{{customerName}}</td>            <th>Mobile No:</th>            <td>{{customerPhone}}</td>         </tr>         <tr>            <th>Address:</th>            <td>{{customerAddress}}</td>            <th>GSTN:</th>            <td></td>         </tr>         <tr>            <th>Email</th>            <td>{{email}}</td>            <th>ID Proof:</t>            <td>ID Proof No:</td>         </tr>      </table>      <table id="products-table">         <thead>            <tr>               <th>No.</th>               <th style="width:50%">Particular</th>               <th>HSN/HSB</th>               <th>Qty</th>               <th>Sale Rate</th>               <th>Disc</th>               <th>GST</th>               <th>Amount</th>            </tr>         </thead>         <tbody>            {{#each products}}            <tr>               <td>{{noitem}}</td>               <td>{{description}}</td>               <td>{{hsn}}</td>               <td align="center">{{quantity}}</td>               <td>{{salePrice}}</td>               <td>{{distotal}}</td>               <td>{{GST}}</td>               <td>{{price}}</td>            </tr>            {{/each}}         </tbody>         <tfoot>            <tr>               <td colspan="2" class="total"></td>               <td></td>               <td></td>               <td></td>               <td></td>               <td></td>               <td>{{totalAmount}}</td>            </tr>         </tfoot>      </table>      <div class="invoice-summary-footer">         <div class="invoice-summary">            <table>               <tr>                  <td>Final Amount:</td>                  <td>{{totalAmount}}</td>               </tr>            </table>         </div>         <div class="footer">            <p>In Words: <span>{{wordsMatter}} Paisa Only</span></p>            <p>Payment Mode:<strong>Cash</strong>/<strong>Online</strong>:{{totalAmount}}</p>            <p>Bill By:Keyur Gajjar</p>            <p>Goods once sold will not be taken back.Warranty will be converted</p>         </div>      </div>   </div></body></html>`;
-                var htmlpayload = {
+                
+                // Use common invoice utility function
+                const invoiceData = {
                   products: items_arr,
-                  totalAmount,
-                  email,
-                  wordsMatter,
-                  number: transaction_id,
+                  totalAmount: totalAmount,
+                  email: email,
+                  wordsMatter: wordsMatter,
                   date: data.rows[0].BillDate,
                   customerName: data.rows[0].CustomerName,
                   customerPhone: data.rows[0].CustomerPhone,
                   customerAddress: data.rows[0].CustomerAddress
                 };
-                var template = Handlebars.compile(html);
-                parsedHtml = template(htmlpayload);
-
-                console.log('Generated HTML length:', parsedHtml.length);
-                console.log('Generated HTML preview:', parsedHtml.substring(0, 500));
-
-                // Create a temporary div to hold the HTML for PDF conversion
-                var tempDiv = document.createElement('div');
-                tempDiv.innerHTML = parsedHtml;
-                tempDiv.style.width = '900px';
-                document.body.appendChild(tempDiv);
-
-                console.log('Temp div created, starting PDF generation...');
-
-                // Configure html2pdf options
-                var opt = {
-                  margin: 5,
-                  filename: `${transaction_id}.pdf`,
-                  image: { type: 'jpeg', quality: 0.98 },
-                  html2canvas: { 
-                    scale: 2,
-                    logging: false,
-                    letterRendering: true,
-                    useCORS: true
-                  },
-                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-                };
-
-                // Generate and download PDF
-                html2pdf().from(tempDiv).set(opt).save().then(function() {
-                  // Remove the temporary div after PDF is generated
-                  console.log('PDF generated and downloaded successfully');
-                  document.body.removeChild(tempDiv);
-                }).catch(function(error) {
-                  console.error('Error generating PDF:', error);
-                  if (document.body.contains(tempDiv)) {
-                    document.body.removeChild(tempDiv);
+                
+                // Wait for libraries to load before generating PDF
+                const waitForLibraries = setInterval(() => {
+                  if (typeof generateInvoicePDF === 'function' && typeof window.QRCode !== 'undefined') {
+                    clearInterval(waitForLibraries);
+                    // Generate PDF with QR code but no email
+                    generateInvoicePDF(transaction_id, invoiceData, true, false);
                   }
-                  alert('Error generating PDF: ' + error.message);
-                });
+                }, 100);
+                
+                // Timeout after 3 seconds
+                setTimeout(() => {
+                  clearInterval(waitForLibraries);
+                  if (typeof window.QRCode === 'undefined') {
+                    console.warn('QRCode library failed to load, generating without QR');
+                    if (typeof generateInvoicePDF === 'function') {
+                      generateInvoicePDF(transaction_id, invoiceData, false, false);
+                    }
+                  }
+                }, 3000);
               } else if (data.status == "failed") {
                 alert("Item not found")
               }
@@ -357,6 +344,9 @@
           });
         }
     </script>
+    
+    <!-- Invoice utilities -->
+    <script src="/js/invoiceUtils.js"></script>
 </main>
 
 <%- include('footer') %>

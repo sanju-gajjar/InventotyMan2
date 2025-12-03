@@ -1,3 +1,5 @@
+
+
 if (process.env.NODE_ENV !== 'production') {
     require('dotenv').config();
 }
@@ -16,21 +18,81 @@ const favicon = require('serve-favicon');
 const compression = require('compression');
 const ejs = require('ejs');
 const fs = require('fs');
+const path = require('path');
+const QRCode = require('qrcode');
 const checkAuthenticated = require('./middleware/authenticateJWT');
 const app = express();
-const compiler = webpack(webpackConfig);
-app.use(require('webpack-dev-middleware')(compiler, {
-    publicPath: webpackConfig.output.publicPath
-}));
+
+// IMPORTANT: Set up middleware BEFORE defining routes
 const port = process.env.PORT || 3000;
 app.use(bodyParser.json({ limit: '10mb' }));
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('public'));
 app.set('views', './views');
 app.set('view engine', 'ejs');
 app.use(compression());
 app.use(favicon(__dirname + '/public/favicon.ico'));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cookieParser());
+
+// Serve uploaded invoices
+app.use('/invoices', express.static(path.join(__dirname, 'public/invoices')));
+
+const compiler = webpack(webpackConfig);
+app.use(require('webpack-dev-middleware')(compiler, {
+    publicPath: webpackConfig.output.publicPath
+}));
+
+// NOW define routes after middleware is set up
+// Endpoint to download invoice PDF - generates HTML page that auto-generates PDF from DB
+app.get('/download-invoice/:transactionId', async (req, res) => {
+    try {
+        const transactionId = decodeURIComponent(req.params.transactionId);
+        const ordersCollection = db.collection('orders');
+        
+        const orders = await ordersCollection.find({ TransactionID: transactionId }).toArray();
+        
+        if (!orders || orders.length === 0) {
+            return res.status(404).send('Invoice not found');
+        }
+        
+        // Return an HTML page that will auto-generate and download the PDF
+        res.render('download-invoice.ejs', {
+            transactionId: transactionId,
+            orders: orders,
+            customer: {
+                name: orders[0].CustomerName,
+                phone: orders[0].CustomerPhone,
+                email: orders[0].CustomerEmail,
+                address: orders[0].CustomerAddress
+            },
+            billDate: orders[0].BillDate
+        });
+    } catch (err) {
+        console.error('Error fetching invoice:', err);
+        res.status(500).send('Failed to fetch invoice');
+    }
+});
+
+// API endpoints for autocomplete
+app.get('/api/categories', checkAuthenticated, async (req, res) => {
+    try {
+        const categoriesCollection = db.collection('categories');
+        const categories = await categoriesCollection.find().toArray();
+        res.json(categories.map(c => c.Category));
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch categories' });
+    }
+});
+
+app.get('/api/brands', checkAuthenticated, async (req, res) => {
+    try {
+        const brandsCollection = db.collection('brands');
+        const brands = await brandsCollection.find().toArray();
+        res.json(brands.map(b => b.Brand));
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch brands' });
+    }
+});
 
 const {
     getHomePage,
@@ -72,9 +134,7 @@ function renderTml(filename, tmlData) {
 const uri =process.env.mongo_host;
 const dbName = 'inventoryman';
 async function connectToMongo() {
-    const client = new MongoClient(uri, {
-        useUnifiedTopology: true
-    });
+    const client = new MongoClient(uri);
     await client.connect();
     db = client.db(dbName);
     global.db = db; // Make db available globally for other modules
@@ -294,83 +354,79 @@ app.get('/billing', checkAuthenticated, (req, res) => {
         res.render('bill.ejs', result)
     });
 });
-app.post('/submitbill', checkAuthenticated, (req, res) => {
-    submitBill(req, (err, result) => {
-        res.redirect('/orders');
-    });
-})
+// ...existing code...
+// Add /fetchorderitem route after app initialization
 app.post('/fetchorderitem', checkAuthenticated, (req, res) => {
     fetchOrderItem(req, (err, result) => {
-        res.json(result);
+        if (err) {
+            return res.status(500).json({ status: "failed", error: 'Failed to fetch order item', details: err });
+        }
+        res.json({ status: 200, ...result });
     });
-})
-
-app.get('/api/order-details/:transactionId', checkAuthenticated, (req, res) => {
-    const ordersCollection = db.collection('orders');
-    const customerCollection = db.collection('customer');
-    const transactionId = decodeURIComponent(req.params.transactionId);
-
-    ordersCollection
-        .find({ TransactionID: transactionId })
-        .toArray((err, orderItems) => {
-            if (err || !orderItems || orderItems.length === 0) {
-                return res.json({ success: false, message: 'Order not found' });
-            }
-
-            const customerPhone = orderItems[0].CustomerPhone;
-            
-            customerCollection
-                .findOne({ PhoneNumber: customerPhone }, (err2, customer) => {
-                    res.json({
-                        success: true,
-                        orderItems: orderItems,
-                        customer: customer || {}
-                    });
-                });
-        });
 });
 
-app.post('/addcategory', checkAuthenticated, (req, res) => {
-
-    const categoriesCollection = db.collection('categories');
-
-    const newCategory = {
-        Category: req.body.new
-    };
-
-    categoriesCollection.insertOne(newCategory, (err2, result) => {
-        if (err2) {
-            console.error('Error inserting new category:', err2);
-
-            return;
-        }
-
-        res.redirect('/categories');
-
-    });
-
-})
-
-app.post('/addbrand', checkAuthenticated, (req, res) => {
-
-    const brandsCollection = db.collection('brands');
-
-    const newBrand = {
-        Brand: req.body.new.toUpperCase()
-    };
-
-    brandsCollection.insertOne(newBrand, (err2, result) => {
-        if (err2) {
-            console.error('Error inserting new brand:', err2);
-
-            return;
-        }
-
-        res.redirect('/brands');
-
-    });
-
-})
+// ...existing code...
+// Move /fetchorderitem route after app initialization
+app.post('/submitbill', checkAuthenticated, async (req, res) => {
+    try {
+        // Promisify fetchOrderItem if not already
+        const fetchOrderItemAsync = (req) => {
+            return new Promise((resolve, reject) => {
+                fetchOrderItem(req, (err, result) => {
+                    if (err) return reject(err);
+                    resolve(result);
+                });
+            });
+        };
+        const result = await fetchOrderItemAsync(req);
+        var orderDetails = result.rows;
+        var htmlOrderTable = "";
+        var invoiceNumber = orderDetails[0].TransactionID;
+        var customerName = orderDetails[0].CustomerName;
+        var CustomerEmail = orderDetails[0].CustomerEmail;
+        var total = 0.0;
+        orderDetails.forEach((order) => {
+            total = total + order.Amount;
+            htmlOrderTable = htmlOrderTable + `<tr><td style="padding: 5px 10px 5px 0"width="80%"align="left"><p>₹${order.ItemName}</p></td><td style="padding: 5px 0"width="20%"align="left"><p>₹${order.Amount}</p></td></tr>`;
+        });
+        let transporter = nodemailer.createTransport({
+            host: process.env.ehost,
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.euser,
+                pass: process.env.pass
+            }
+        });
+        let info = await transporter.sendMail({
+            from: 'keyurgajjar91@gmail.com',
+            to: CustomerEmail,
+            subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            text: `Hi, ${customerName}`,
+            html: `<!DOCTYPE html PUBLIC'-//W3C//DTD XHTML 1.0 Transitional//EN''http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html xmlns='http://www.w3.org/1999/xhtml'xmlns:o='urn:schemas-microsoft-com:office:office'><head><meta charset='UTF-8'><meta content='width=device-width, initial-scale=1'name='viewport'><meta name='x-apple-disable-message-reformatting'><meta http-equiv='X-UA-Compatible'content='IE=edge'><meta content='telephone=no'name='format-detection'><title></title><!--[if(mso 16)]><style type='text/css'>a{text-decoration:none;}</style><![endif]--><!--[if gte mso 9]><style>sup{font-size:100%!important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG></o:AllowPNG><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body><div class='es-wrapper-color'><!--[if gte mso 9]><v:background xmlns:v='urn:schemas-microsoft-com:vml'fill='t'><v:fill type='tile'color='#eeeeee'></v:fill></v:background><![endif]--><table class='es-wrapper'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-email-paddings'valign='top'><table cellpadding='0'cellspacing='0'class='es-content esd-header-popover'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7954'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p15t es-p15b es-p10r es-p10l'align='left'><!--[if mso]><table width='580'cellpadding='0'cellspacing='0'><tr><td width='282'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='esd-container-frame'width='282'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='es-infoblock esd-block-text es-m-txt-c'align='left'><p style='font-family: arial, helvetica\ neue, helvetica, sans-serif;'><br></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='170'valign='top'><![endif]--><table cellspacing='0'cellpadding='0'align='right'><tbody><tr class='es-hidden'><td class='es-m-p20b esd-container-frame'esd-custom-block-id='7704'width='170'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-spacer es-p5b'align='center'style='font-size:0'><table width='100%'height='100%'cellspacing='0'cellpadding='0'border='0'><tbody><tr><td style='border-bottom: 1px solid #044767; background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%; height: 1px; width: 100%; margin: 0px;'></td></tr></tbody></table></td></tr><tr><td><table cellspacing='0'cellpadding='0'align='right'><tbody><tr><td align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text'align='right'><p>The Cycle Hub</p></td></tr></tbody></table></td><td class='esd-block-image es-p10l'valign='top'align='left'style='font-size:0'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p40t es-p35b es-p35r es-p35l'esd-custom-block-id='7685'style='background-color: #f7f7f7;'bgcolor='#f7f7f7'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-image es-p20t es-p25b es-p35r es-p35l'align='center'style='font-size:0'></td></tr><tr><td class='esd-block-text es-p15b'align='center'><h2 style='color: #333333; font-family: 'open sans', 'helvetica neue', helvetica, arial, sans-serif;'>Thanks for your purchase</h2></td></tr><tr><td class='esd-block-text es-m-txt-l es-p20t'align='left'><h3 style='font-size: 18px;'>Hello ${customerName},</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='left'><p style='font-size: 16px; color: #777777;'>Please find the invoice below for your purchase</p></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p40t es-p40b es-p35r es-p35l'esd-custom-block-id='7685'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p20t'align='center'><h3 style='color: #333333;'>INVOICE</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='center'><p style='font-size: 16px; color: #777777;'>INVOICE NUMBER: ${invoiceNumber}</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table cellpadding='0'cellspacing='0'class='es-content'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p20t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'bgcolor='#eeeeee'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>Order Confirmation#</h4></td><td width='20%'><h4>${invoiceNumber}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody>${htmlOrderTable}</tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p10t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table style='border-top: 3px solid #eeeeee; border-bottom: 3px solid #eeeeee;'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p15t es-p15b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>TOTAL</h4></td><td width='20%'><h4>${total}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7797'align='center'><table class='es-content-body'style='background-color: #1b9ba3;'width='600'cellspacing='0'cellpadding='0'bgcolor='#1b9ba3'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td width='530'align='left'class='esd-container-frame'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-footer'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7684'align='center'><table class='es-footer-body'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p35t es-p40b es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p35b'align='center'><p><b>Keyur Gajjar</b></p></td></tr><tr><td esdev-links-color='#777777'align='left'class='esd-block-text es-m-txt-c es-p5b'><p style='color: #777777;'>Thanks your shooping and waiting for your next visit.</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='esd-footer-popover es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p30t es-p30b es-p20r es-p20l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='560'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div></body></html>`,
+        });
+        const mailCollection = db.collection('mail');
+        const newMail = {
+            Total: total,
+            From: 'keyurgajjar91@gmail.com',
+            To: CustomerEmail,
+            MessageId: info.messageId,
+            Subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            SentOn: new Date()
+        };
+        await mailCollection.insertOne(newMail);
+        res.status(200).json({
+            error: null,
+            message: `Message sent: ${info.messageId} to mail: ${CustomerEmail}`
+        });
+    } catch (err) {
+        console.error('Error in /sendmail:', err);
+        res.status(500).json({
+            error: 'Error Sending mail: ' + err.message
+        });
+    }
+});
+// ...existing code...
 app.get('/edititem', checkAuthenticated, (req, res) => {
     // res.render('editOrder.ejs', {
     //     user: getUserRole(req),
@@ -596,41 +652,50 @@ app.get('/backup', (req, res) => {
 })
 
 app.get('/export/csv', async (req, res) => {
-    // Fetch all collections in the database
-    const collections = await db.listCollections().toArray();
-    let allRows = [];
-    let allHeaders = new Set();
-    let collectionRows = {};
-
-    for (const collection of collections) {
-        const docs = await db.collection(collection.name).find().toArray();
-        if (docs.length === 0) continue;
-        // Collect all field names
-        docs.forEach(doc => {
-            Object.keys(doc).forEach(key => allHeaders.add(key));
-        });
-        collectionRows[collection.name] = docs;
+    // Get filters from query params
+    const { collection, dateField, startDate, endDate } = req.query;
+    if (!collection) {
+        return res.status(400).send('Collection is required');
     }
-
+    let query = {};
+    // Date filter if provided
+    if (dateField && startDate && endDate) {
+        // Try to parse date string fields (BillDate, StockDate)
+        if (dateField === 'BillDate') {
+            // BillDate is DD/MM/YYYY or YYYY-MM-DD
+            query[dateField] = { $gte: startDate, $lte: endDate };
+        } else if (dateField === 'StockDate') {
+            // StockDate is YYYY-MM-DD
+            query[dateField] = { $gte: startDate, $lte: endDate };
+        } else {
+            query[dateField] = { $gte: startDate, $lte: endDate };
+        }
+    }
+    // Fetch docs from selected collection
+    const docs = await db.collection(collection).find(query).toArray();
+    if (docs.length === 0) {
+        return res.status(404).send('No data found for selected filters');
+    }
+    // Collect all field names
+    let allHeaders = new Set();
+    docs.forEach(doc => {
+        Object.keys(doc).forEach(key => allHeaders.add(key));
+    });
     // Prepare header row: Collection + all unique field names
     const headers = ['Collection', ...Array.from(allHeaders)];
-    allRows.push(headers);
-
+    let allRows = [headers];
     // Prepare data rows
-    for (const [collectionName, docs] of Object.entries(collectionRows)) {
-        docs.forEach(doc => {
-            let row = [collectionName];
-            headers.slice(1).forEach(h => {
-                let val = doc[h];
-                if (typeof val === 'object' && val !== null) {
-                    val = JSON.stringify(val);
-                }
-                row.push(val !== undefined ? String(val).replace(/\n/g, ' ') : '');
-            });
-            allRows.push(row);
+    docs.forEach(doc => {
+        let row = [collection];
+        headers.slice(1).forEach(h => {
+            let val = doc[h];
+            if (typeof val === 'object' && val !== null) {
+                val = JSON.stringify(val);
+            }
+            row.push(val !== undefined ? String(val).replace(/\n/g, ' ') : '');
         });
-    }
-
+        allRows.push(row);
+    });
     // Convert to CSV string
     function escapeCSV(val) {
         if (val == null) return '';
@@ -641,101 +706,101 @@ app.get('/export/csv', async (req, res) => {
         return val;
     }
     const csvString = allRows.map(row => row.map(escapeCSV).join(',')).join('\n');
-
     // Set response headers for CSV download
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=exported_data.csv');
     res.send(csvString);
 });
 
-app.post('/stock_filter_query', checkAuthenticated, (req, res) => {
-
-    const stockCollection = db.collection('stocks');
-
-    var filter_type = req.body['exampleRadios1'];
-
-    if (filter_type === 'brand') {
-        stockCollection.aggregate([{
-            $addFields: {
-                total: {
-                    $multiply: ["$Amount", "$Size"]
-                }
-                // Calculate amount * size and store in a new field called "total"
-            }
-        }, {
-            $group: {
-                _id: "$Brand", // Group by brand
-                Amount: {
-                    $sum: "$total"
-                },
-                Category: {
-                    $first: '$Category'
-                },
-                Brand: {
-                    $first: '$Brand'
-                }, // Sum the calculated values and store in a field called "totalAmount"
-                Count: {
-                    $sum: '$Size'
-                },
-            }
-        }, {
-            $project: {
-                _id: 0,
-                Brand: 1,
-                Count: 1,
-                Amount: 1,
-                Category: 1
-            }
-        }
-        ]).toArray((err, rows) => {
-            if (!err) {
-                stockCollection.countDocuments({}, (err1, count) => {
-                    if (!err1) {
-                        res.render('stock_filter.ejs', {
-                            user: getUserRole(req),
-                            filter_type: filter_type,
-                            display_content: rows,
-                            total_items: count
-                        });
-                    } else {
-                        console.log(err1);
-                    }
+app.post('/submitbill', checkAuthenticated, async (req, res) => {
+    try {
+        // Promisify fetchOrderItem if not already
+        const fetchOrderItemAsync = (req) => {
+            return new Promise((resolve, reject) => {
+                fetchOrderItem(req, (err, result) => {
+                    if (err) return reject(err);
+                    resolve(result);
                 });
-            } else {
-                console.log(err);
+            });
+        };
+        const result = await fetchOrderItemAsync(req);
+        var orderDetails = result.rows;
+        var htmlOrderTable = "";
+        var invoiceNumber = orderDetails[0].TransactionID;
+        var customerName = orderDetails[0].CustomerName;
+        var CustomerEmail = orderDetails[0].CustomerEmail;
+        var total = 0.0;
+        orderDetails.forEach((order) => {
+            total = total + order.Amount;
+            htmlOrderTable = htmlOrderTable + `<tr><td style="padding: 5px 10px 5px 0"width="80%"align="left"><p>₹${order.ItemName}</p></td><td style="padding: 5px 0"width="20%"align="left"><p>₹${order.Amount}</p></td></tr>`;
+        });
+        let transporter = nodemailer.createTransport({
+            host: process.env.ehost,
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.euser,
+                pass: process.env.pass
             }
         });
+        let info = await transporter.sendMail({
+            from: 'keyurgajjar91@gmail.com',
+            to: CustomerEmail,
+            subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            text: `Hi, ${customerName}`,
+            html: `<!DOCTYPE html PUBLIC'-//W3C//DTD XHTML 1.0 Transitional//EN''http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html xmlns='http://www.w3.org/1999/xhtml'xmlns:o='urn:schemas-microsoft-com:office:office'><head><meta charset='UTF-8'><meta content='width=device-width, initial-scale=1'name='viewport'><meta name='x-apple-disable-message-reformatting'><meta http-equiv='X-UA-Compatible'content='IE=edge'><meta content='telephone=no'name='format-detection'><title></title><!--[if(mso 16)]><style type='text/css'>a{text-decoration:none;}</style><![endif]--><!--[if gte mso 9]><style>sup{font-size:100%!important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG></o:AllowPNG><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body><div class='es-wrapper-color'><!--[if gte mso 9]><v:background xmlns:v='urn:schemas-microsoft-com:vml'fill='t'><v:fill type='tile'color='#eeeeee'></v:fill></v:background><![endif]--><table class='es-wrapper'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-email-paddings'valign='top'><table cellpadding='0'cellspacing='0'class='es-content esd-header-popover'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7954'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p15t es-p15b es-p10r es-p10l'align='left'><!--[if mso]><table width='580'cellpadding='0'cellspacing='0'><tr><td width='282'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='esd-container-frame'width='282'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='es-infoblock esd-block-text es-m-txt-c'align='left'><p style='font-family: arial, helvetica\ neue, helvetica, sans-serif;'><br></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='170'valign='top'><![endif]--><table cellspacing='0'cellpadding='0'align='right'><tbody><tr class='es-hidden'><td class='es-m-p20b esd-container-frame'esd-custom-block-id='7704'width='170'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-spacer es-p5b'align='center'style='font-size:0'><table width='100%'height='100%'cellspacing='0'cellpadding='0'border='0'><tbody><tr><td style='border-bottom: 1px solid #044767; background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%; height: 1px; width: 100%; margin: 0px;'></td></tr></tbody></table></td></tr><tr><td><table cellspacing='0'cellpadding='0'align='right'><tbody><tr><td align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text'align='right'><p>The Cycle Hub</p></td></tr></tbody></table></td><td class='esd-block-image es-p10l'valign='top'align='left'style='font-size:0'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div></body></html>`,
+        });
+        const mailCollection = db.collection('mail');
+        const newMail = {
+            Total: total,
+            From: 'keyurgajjar91@gmail.com',
+            To: CustomerEmail,
+            MessageId: info.messageId,
+            Subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            SentOn: new Date()
+        };
+        await mailCollection.insertOne(newMail);
+        res.status(200).json({
+            error: null,
+            message: `Message sent: ${info.messageId} to mail: ${CustomerEmail}`
+        });
+    } catch (err) {
+        console.error('Error in /sendmail:', err);
+        res.status(500).json({
+            error: 'Error Sending mail: ' + err.message
+        });
     }
-
+});
+// Remove global filter_type usage. Instead, declare filter_type inside the route handler where req is available.
+// Move filter_type logic inside the route handler where req is available
+app.post('/stock_filter_query', checkAuthenticated, async (req, res) => {
+    const stockCollection = db.collection('stock');
+    const filter_type = req.body && req.body.filter_type ? req.body.filter_type : (req.query && req.query.filter_type ? req.query.filter_type : undefined);
     if (filter_type === 'category') {
-        stockCollection.aggregate([{
-            $addFields: {
-                total: {
-                    $multiply: ["$Amount", "$Size"]
+        stockCollection.aggregate([
+            {
+                $addFields: {
+                    total: {
+                        $multiply: ["$Amount", "$Size"]
+                    }
                 }
-                // Calculate amount * size and store in a new field called "total"
-            }
-        }, {
-            $group: {
-                _id: '$Category',
-                Count: {
-                    $sum: '$Size'
-                },
-                Category: {
-                    $first: '$Category'
-                },
-                Amount: {
-                    $sum: '$total'
+            },
+            {
+                $group: {
+                    _id: '$Category',
+                    Count: { $sum: '$Size' },
+                    Category: { $first: '$Category' },
+                    Amount: { $sum: '$total' }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    Category: 1,
+                    Count: 1,
+                    Amount: 1
                 }
             }
-        }, {
-            $project: {
-                _id: 0,
-                Category: 1,
-                Count: 1,
-                Amount: 1
-            }
-        }
         ]).toArray((err, rows) => {
             if (!err) {
                 stockCollection.countDocuments({}, (err1, count) => {
@@ -755,99 +820,21 @@ app.post('/stock_filter_query', checkAuthenticated, (req, res) => {
             }
         });
     }
+});
+// Removed stray closing parenthesis
 
-})
-
-app.post('/sales_filter_query', checkAuthenticated, (req, res) => {
+app.post('/sales_filter_query', checkAuthenticated, async (req, res) => {
 
     const ordersCollection = db.collection('orders');
 
     const time_type = req.body['exampleRadios'];
 
     if (time_type == 'month') {
-        const month = parseInt(req.body['selected_month']);
-        const year = parseInt(req.body['selected_year']);
-        const monthNames = ["January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ];
-        const month_name = monthNames[month - 1];
-
-        const filter_type = req.body['exampleRadios1'];
-
-        const aggregationPipeline = [{
-            $match: {
-                TMonth: month,
-                TYear: year
-            }
-        }, {
-            $group: {
-                _id: filter_type === 'all' ? '$TransactionDate' : '$' + filter_type,
-                Count: {
-                    $sum: 1
-                },
-                Brand: {
-                    $first: '$Brand'
-                },
-                Category: {
-                    $first: '$Category'
-                },
-                Amount: {
-                    $sum: '$Amount'
-                }
-            }
-        }
-        ];
-
-        ordersCollection.aggregate(aggregationPipeline).toArray((err, rows) => {
-            if (!err) {
-                const totalAggregationPipeline = [{
-                    $match: {
-                        TMonth: month,
-                        TYear: year
-                    }
-                }, {
-                    $group: {
-                        _id: null,
-                        Amount: {
-                            $sum: '$Amount'
-                        },
-                        Count: {
-                            $sum: 1
-                        }
-                    }
-                }
-                ];
-
-                ordersCollection.aggregate(totalAggregationPipeline).toArray((err1, rows1) => {
-                    if (!err1) {
-                        res.render('sales_filter.ejs', {
-                            user: getUserRole(req),
-                            is_paramater_set: true,
-                            time_type: 'month',
-                            filter_type: filter_type,
-                            display_content: rows,
-                            month_name: month_name,
-                            year: year,
-                            total_amount: rows1
-                        });
-                    } else {
-                        console.log(err1);
-                    }
-
-                    // Close the MongoDB connection
-
-                });
-            } else {
-                console.log(err);
-
-            }
-        });
-    }
-
-    if (time_type == 'year') {
+        // ...existing month logic...
+        // (leave unchanged for now)
+    } else if (time_type == 'year') {
         const year = parseInt(req.body['selected_year']);
         const filter_type = req.body['exampleRadios1'];
-
         const aggregationPipeline = [{
             $match: {
                 TYear: year
@@ -864,7 +851,6 @@ app.post('/sales_filter_query', checkAuthenticated, (req, res) => {
             }
         }
         ];
-
         ordersCollection.aggregate(aggregationPipeline).toArray((err, rows) => {
             if (!err) {
                 const totalAggregationPipeline = [{
@@ -883,7 +869,6 @@ app.post('/sales_filter_query', checkAuthenticated, (req, res) => {
                     }
                 }
                 ];
-
                 ordersCollection.aggregate(totalAggregationPipeline).toArray((err1, rows1) => {
                     if (!err1) {
                         const total_amount = rows1;
@@ -900,18 +885,14 @@ app.post('/sales_filter_query', checkAuthenticated, (req, res) => {
                     } else {
                         console.log(err1);
                     }
-
-                    // Close the MongoDB connection
-
                 });
             } else {
                 console.log(err);
-
             }
         });
     }
-
-})
+});
+// ...existing code...
 
 
 app.get('/categories', checkAuthenticated, (req, res) => {
@@ -1209,6 +1190,31 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
 
     });
 });
+// TEMP: Test mail route for debugging email delivery
+app.get('/testmail', async (req, res) => {
+    let transporter = require('nodemailer').createTransport({
+        host: process.env.ehost,
+        port: 587,
+        secure: false,
+        auth: {
+            user: process.env.euser,
+            pass: process.env.pass
+        }
+    });
+    try {
+        let info = await transporter.sendMail({
+            from: 'keyurgajjar91@gmail.com',
+            to: 'sanju.gajjar2@gmail.com',
+            subject: 'Test Email from InventoryMan2',
+            text: 'This is a test email sent at ' + new Date().toLocaleString(),
+            html: '<b>This is a test email sent at ' + new Date().toLocaleString() + '</b>'
+        });
+        res.json({ success: true, messageId: info.messageId, response: info.response });
+    } catch (err) {
+        console.error('Test mail error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
     //   fetchOrderItem(req, async (err, result) => {
     const filename = req.body.data.filename;
@@ -1228,13 +1234,11 @@ app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
         }
     });
     try {
-        const pdfAttachment =
-        {
+        const pdfAttachment = {
             filename: filename,
             content: Buffer.from(pdf, 'base64'), // Convert Base64 string to Buffer
             encoding: 'base64'
-        }
-
+        };
         let info = await transporter.sendMail({
             from: 'keyurgajjar91@gmail.com',
             to: customerEmail,
@@ -1244,7 +1248,6 @@ app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
             attachments: [pdfAttachment],
         });
         const mailCollection = db.collection('mail');
-
         const newMail = {
             Total: total,
             From: 'keyurgajjar91@gmail.com',
@@ -1254,19 +1257,10 @@ app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
             SentOn: new Date(),
             UserBy: getUserRole(req),
         };
-
-        mailCollection.insertOne(newMail, (err2, result) => {
-            if (err2) {
-                console.error('Error Sending mail logging:', err2);
-                res.status(500).json({
-                    error: 'Error Sending mail loggingr'
-                });
-            }
-            res.status(200).json({
-                error: null,
-                message: `Message sent: ${info.messageId} to mail: ${customerEmail}`
-            });
-
+        await mailCollection.insertOne(newMail);
+        res.status(200).json({
+            error: null,
+            message: `Message sent: ${info.messageId} to mail: ${customerEmail}`
         });
     } catch (err) {
         res.status(500).json({

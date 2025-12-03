@@ -231,7 +231,6 @@
                 </div>
             </div>
         </div>
-
         <!-- Total Orders -->
         <div class="stat-card primary">
             <div class="stat-header">
@@ -246,7 +245,6 @@
                 </div>
             </div>
         </div>
-
         <!-- Total Stock -->
         <div class="stat-card warning">
             <div class="stat-header">
@@ -261,7 +259,6 @@
                 </div>
             </div>
         </div>
-
         <!-- Stock Value -->
         <div class="stat-card info">
             <div class="stat-header">
@@ -277,6 +274,100 @@
             </div>
         </div>
     </div>
+
+    <!-- Dashboard Widgets -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 32px; margin-bottom: 32px;">
+        <div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">Sales Trend (Last 12 Months)</h2>
+                <canvas id="salesTrendChart" height="120"></canvas>
+            </div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">Orders Trend (Last 12 Months)</h2>
+                <canvas id="ordersTrendChart" height="120"></canvas>
+            </div>
+        </div>
+        <div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">Top 5 Products</h2>
+                <ul style="list-style:none; padding:0;">
+                    <% topProducts.forEach(function(p){ %>
+                        <li style="margin-bottom:12px; font-size:16px; font-weight:600;">
+                            <span style="color:var(--primary);"><%= p._id %></span> — ₹<%= p.totalSales %> (<%= p.count %> orders)
+                        </li>
+                    <% }); %>
+                </ul>
+            </div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">Top 5 Customers</h2>
+                <ul style="list-style:none; padding:0;">
+                    <% topCustomers.forEach(function(c){ %>
+                        <li style="margin-bottom:12px; font-size:16px; font-weight:600;">
+                            <span style="color:var(--success);"><%= c._id %></span> — ₹<%= c.totalAmount %> (<%= c.count %> orders)
+                        </li>
+                    <% }); %>
+                </ul>
+            </div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">Low Stock Alerts</h2>
+                <ul style="list-style:none; padding:0;">
+                    <% lowStock.forEach(function(s){ %>
+                        <li style="margin-bottom:12px; font-size:16px; font-weight:600;">
+                            <span style="color:var(--danger);"><%= s.ItemName %></span> (ID: <%= s.ItemID %>) — <strong><%= s.Size %></strong> left
+                        </li>
+                    <% }); %>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Sales Trend Chart
+        const salesTrendData = <%- JSON.stringify(salesTrend) %>;
+        const salesLabels = salesTrendData.map(d => `${d._id.month}/${d._id.year}`);
+        const salesValues = salesTrendData.map(d => d.totalSales);
+        new Chart(document.getElementById('salesTrendChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: salesLabels,
+                datasets: [{
+                    label: 'Sales',
+                    data: salesValues,
+                    borderColor: 'rgba(99,102,241,1)',
+                    backgroundColor: 'rgba(99,102,241,0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } }
+            }
+        });
+        // Orders Trend Chart
+        const ordersTrendData = <%- JSON.stringify(ordersTrend) %>;
+        const ordersLabels = ordersTrendData.map(d => `${d._id.month}/${d._id.year}`);
+        const ordersValues = ordersTrendData.map(d => d.totalOrders);
+        new Chart(document.getElementById('ordersTrendChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ordersLabels,
+                datasets: [{
+                    label: 'Orders',
+                    data: ordersValues,
+                    backgroundColor: 'rgba(16,185,129,0.7)',
+                    borderColor: 'rgba(16,185,129,1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } }
+            }
+        });
+    </script>
 
     <!-- Quick Actions -->
     <div class="quick-actions">

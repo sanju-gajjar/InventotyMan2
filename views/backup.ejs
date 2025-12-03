@@ -76,12 +76,60 @@
     <div class="backup-card">
         <i class="material-icons">cloud_download</i>
         <h2>Export Database</h2>
-        <p>Download a complete backup of your inventory database in CSV format. This includes all products, orders, and transaction history.</p>
-        <a href="/export/csv" class="btn-download">
-            <i class="material-icons">download</i>
-            Download CSV Backup
-        </a>
+        <p>Select a collection and (if available) date range to export as CSV.</p>
+        <form id="exportForm" method="GET" action="/export/csv">
+            <div style="margin-bottom: 20px;">
+                <label for="collection">Collection:</label>
+                <select name="collection" id="collection" required>
+                    <option value="orders">Orders</option>
+                    <option value="stocks">Stocks</option>
+                    <option value="categories">Categories</option>
+                    <option value="brands">Brands</option>
+                    <option value="sizes">Sizes</option>
+                    <option value="users">Users</option>
+                    <option value="customer">Customer</option>
+                    <option value="mail">Mail</option>
+                    <option value="receipt">Receipt</option>
+                </select>
+            </div>
+            <div id="dateFilter" style="display:none; margin-bottom: 20px;">
+                <label for="dateField">Date Field:</label>
+                <select name="dateField" id="dateField">
+                    <option value="">-- Select --</option>
+                    <option value="BillDate">BillDate (orders)</option>
+                    <option value="StockDate">StockDate (stocks)</option>
+                </select>
+                <br>
+                <label for="startDate">Start Date:</label>
+                <input type="date" name="startDate" id="startDate">
+                <label for="endDate">End Date:</label>
+                <input type="date" name="endDate" id="endDate">
+            </div>
+            <button type="submit" class="btn-download">
+                <i class="material-icons">download</i>
+                Export CSV
+            </button>
+        </form>
     </div>
+    <script>
+        // Show date filter only for collections with date fields
+        const collectionDateFields = {
+            orders: ['BillDate'],
+            stocks: ['StockDate']
+        };
+        document.getElementById('collection').addEventListener('change', function() {
+            const val = this.value;
+            if (collectionDateFields[val]) {
+                document.getElementById('dateFilter').style.display = '';
+                // Set dateField options
+                const dateFieldSelect = document.getElementById('dateField');
+                dateFieldSelect.innerHTML = '<option value="">-- Select --</option>' +
+                    collectionDateFields[val].map(f => `<option value="${f}">${f}</option>`).join('');
+            } else {
+                document.getElementById('dateFilter').style.display = 'none';
+            }
+        });
+    </script>
 </main>
 
 <%- include('footer') %>

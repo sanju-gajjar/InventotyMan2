@@ -44,33 +44,7 @@ exports.getHomePage = function (req,callback) {
         const ordersCollection = db.collection('orders');
         // Orders pipeline: parse BillDate and filter
         // Helper: parse BillDate as DD/MM/YYYY or fallback to YYYY-MM-DD
-        const pipeline = [
-          {
-            $addFields: {
-              BillDateObj: {
-                $cond: [
-                  { $regexMatch: { input: "$BillDate", regex: "/\\d{2}\\/\\d{2}\\/\\d{4}/" } },
-                  { $dateFromString: { dateString: "$BillDate", format: "%d/%m/%Y" } },
-                  { $dateFromString: { dateString: "$BillDate", format: "%Y-%m-%d" } }
-                ]
-              },
-              total: { $multiply: ["$Amount", "$Size"] }
-            }
-          },
-          {
-            $match: {
-              BillDateObj: { $gte: startDate, $lte: endDate }
-            }
-          },
-          {
-            $group: {
-              _id: '_id',
-              TotalItemsOrdered: { $sum: "$total" }
-            }
-          }
-        ];
-        // For order count
-        const countPipeline = [
+        const baseMatch = [
           {
             $addFields: {
               BillDateObj: {
@@ -88,24 +62,92 @@ exports.getHomePage = function (req,callback) {
             }
           }
         ];
-        ordersCollection.aggregate(countPipeline).toArray((err, resultCount) => {
-          ordersCollection.aggregate(pipeline).toArray((err, result) => {
-            if (err) {
-              console.error('Error executing aggregation:', err);
-              return;
+        // Sales trend (monthly sales)
+        const salesTrendPipeline = [
+          ...baseMatch,
+          {
+            $group: {
+              _id: { year: { $year: "$BillDateObj" }, month: { $month: "$BillDateObj" } },
+              totalSales: { $sum: "$Amount" }
             }
-            var returnData = {
-              user: getUserRole(req),
-              total_sales: result,
-              ord_num: [{ NumberOfProducts: resultCount ? resultCount.length : 0 }],
-              stock_num: [{ NumberOfProducts: (resultStocksCount.length != null && resultStocksCount.length != undefined) ? resultStocksCount.length : 0 }],
-              total_stock: resultStock,
-              period: period,
-              startDate: startDate,
-              endDate: endDate
-            };
-            callback(err, returnData);
-          });
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } }
+        ];
+        // Orders trend (monthly orders)
+        const ordersTrendPipeline = [
+          ...baseMatch,
+          {
+            $group: {
+              _id: { year: { $year: "$BillDateObj" }, month: { $month: "$BillDateObj" } },
+              totalOrders: { $sum: 1 }
+            }
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } }
+        ];
+        // Top products (by sales)
+        const topProductsPipeline = [
+          ...baseMatch,
+          {
+            $group: {
+              _id: "$ItemName",
+              totalSales: { $sum: "$Amount" },
+              count: { $sum: 1 }
+            }
+          },
+          { $sort: { totalSales: -1 } },
+          { $limit: 5 }
+        ];
+        // Top customers (by purchase amount)
+        const topCustomersPipeline = [
+          ...baseMatch,
+          {
+            $group: {
+              _id: "$CustomerPhone",
+              totalAmount: { $sum: "$Amount" },
+              count: { $sum: 1 }
+            }
+          },
+          { $sort: { totalAmount: -1 } },
+          { $limit: 5 }
+        ];
+        // Low stock alerts (products below threshold)
+        const lowStockPipeline = [
+          { $match: { Size: { $lt: 5 } } },
+          { $project: { ItemID: 1, ItemName: 1, Size: 1 } },
+          { $sort: { Size: 1 } },
+          { $limit: 10 }
+        ];
+
+        // Run all aggregations in parallel
+        Promise.all([
+          ordersCollection.aggregate(salesTrendPipeline).toArray(),
+          ordersCollection.aggregate(ordersTrendPipeline).toArray(),
+          ordersCollection.aggregate(topProductsPipeline).toArray(),
+          ordersCollection.aggregate(topCustomersPipeline).toArray(),
+          stockCollection.aggregate(lowStockPipeline).toArray(),
+          // Existing stats
+          ordersCollection.aggregate([...baseMatch, { $group: { _id: '_id', TotalItemsOrdered: { $sum: "$Amount" } } }]).toArray(),
+          ordersCollection.aggregate([...baseMatch]).toArray(),
+        ]).then(([salesTrend, ordersTrend, topProducts, topCustomers, lowStock, total_sales, resultCount]) => {
+          var returnData = {
+            user: getUserRole(req),
+            total_sales: total_sales,
+            ord_num: [{ NumberOfProducts: resultCount ? resultCount.length : 0 }],
+            stock_num: [{ NumberOfProducts: (resultStocksCount.length != null && resultStocksCount.length != undefined) ? resultStocksCount.length : 0 }],
+            total_stock: resultStock,
+            period: period,
+            startDate: startDate,
+            endDate: endDate,
+            salesTrend,
+            ordersTrend,
+            topProducts,
+            topCustomers,
+            lowStock
+          };
+          callback(null, returnData);
+        }).catch(err => {
+          console.error('Dashboard aggregation error:', err);
+          callback(err, null);
         });
       });
     });
@@ -113,79 +155,82 @@ exports.getHomePage = function (req,callback) {
 exports.getOrderPage = function (req, callback) { 
     const ordersCollection = db.collection('orders');
     const customerCollection = db.collection('customer');
-    ordersCollection
-      .aggregate([
-        {
-          $group: {
-            _id: "$TransactionID",
-            Amount: {
-              $sum: "$Amount"
-            },
-            TransactionDate: {
-              $first: "$TransactionDate"
-            },
-            TransactionTime: {
-              $first: "$TransactionTime"
-            },
-            CustomerPhone: {
-              $first: "$CustomerPhone"
-            },
-            mongoId: {
-              $first: "$_id"
-            },
-            BillDate: {
-              $first: "$BillDate"
-            }
-          }
-        },
-        {
-          $sort: { mongoId: -1 }
-        }
-      ])
-      .toArray((err, rows) => {
-        if (!err) {
-          ordersCollection
-            .find()
-            .sort({ _id: -1 })
-            .toArray((err1, rows1) => {
-              if (!err1) {
-                let customerPhonesList = rows.map(x => x.CustomerPhone);
-                customerCollection
-                  .find({ PhoneNumber: { $in: customerPhonesList } })
-                  .sort({ _id: -1 })
-                  .toArray((err1, customerInfo) => {
-                    if (customerInfo != null) {
-                      let result = {
-                        user: getUserRole(req),
-                        orders: rows,
-                        sub_orders: rows1,
-                        customerInfo: customerInfo,
-                        selected_item: "None",
-                        month_name: "None",
-                        year: "None"
-                      };
-                      callback(err, result);
-                    } else {
-                      let result = {
-                        user: getUserRole(req),
-                        orders: rows,
-                        sub_orders: rows1,
-                        customerInfo: undefined,
-                        selected_item: "None",
-                        month_name: "None",
-                        year: "None"
-                      };
-                      callback(err, result);
-                    }
-                  });
-              } else {
-                console.log(err1);
-              }
+    // Pagination and search params
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = 20;
+    const searchCustomer = req.query.customer || '';
+    const searchPhone = req.query.phone || '';
+    const searchOrder = req.query.order || '';
+
+    // Build search filter
+    let filter = {};
+    if (searchOrder) {
+        filter.TransactionID = { $regex: searchOrder, $options: 'i' };
+    }
+    if (searchPhone) {
+        filter.CustomerPhone = searchPhone;
+    }
+
+    // For customer name search, need to lookup customer collection
+    let customerNameFilter = {};
+    if (searchCustomer) {
+        customerNameFilter.CustomerName = { $regex: searchCustomer, $options: 'i' };
+    }
+
+    // Find matching customer phones if searching by name
+    function getCustomerPhones(cb) {
+        if (searchCustomer) {
+            customerCollection.find(customerNameFilter).toArray((err, customers) => {
+                if (err || !customers) return cb([]);
+                cb(customers.map(c => c.PhoneNumber));
             });
         } else {
-          console.log(err);
+            cb(null);
         }
-      });
+    }
+
+    getCustomerPhones((phones) => {
+        if (phones && phones.length > 0) {
+            filter.CustomerPhone = { $in: phones };
+        }
+        ordersCollection.aggregate([
+            { $match: filter },
+            {
+                $group: {
+                    _id: "$TransactionID",
+                    Amount: { $sum: "$Amount" },
+                    TransactionDate: { $first: "$TransactionDate" },
+                    TransactionTime: { $first: "$TransactionTime" },
+                    CustomerPhone: { $first: "$CustomerPhone" },
+                    mongoId: { $first: "$_id" },
+                    BillDate: { $first: "$BillDate" }
+                }
+            },
+            { $sort: { mongoId: -1 } },
+            { $skip: (page - 1) * pageSize },
+            { $limit: pageSize }
+        ]).toArray((err, rows) => {
+            if (!err) {
+                let customerPhonesList = rows.map(x => x.CustomerPhone);
+                customerCollection.find({ PhoneNumber: { $in: customerPhonesList } }).toArray((err1, customerInfo) => {
+                    let result = {
+                        user: getUserRole(req),
+                        orders: rows,
+                        customerInfo: customerInfo,
+                        page,
+                        pageSize,
+                        searchCustomer,
+                        searchPhone,
+                        searchOrder
+                    };
+                    callback(err, result);
+                });
+            } else {
+                console.log(err);
+                callback(err, null);
+            }
+        });
+    });
 }
 
 exports.getBarcodePage = function (req, callback) { 

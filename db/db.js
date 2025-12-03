@@ -7,8 +7,10 @@ const dbName = 'inventoryman';
 let db;
 
 async function connectToMongo() {
-    // Create a Mongo client
-    const client = new MongoClient(uri, { useUnifiedTopology: true });
+    // Create a Mongo client with updated options
+    const client = new MongoClient(uri, {
+        useUnifiedTopology: true
+    });
     await client.connect();
     db = client.db(dbName);
     global.db = db; // Make db available globally

@@ -2,7 +2,9 @@
 
 <main class="app-main">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.min.js"></script>
     <script src="/easyInvoice.min.js"></script>
+    <script src="/js/invoiceUtils.js"></script>
     
     <style>
         .billing-page {
@@ -482,6 +484,17 @@
                                     <input type="hidden" name="onlinePayment" id="onlinePayment" value="no">
                                 </div>
                             </div>
+                            <div class="form-group">
+                                <label class="form-label">Send Email</label>
+                                <div class="toggle-container">
+                                    <button type="button" class="toggle-btn" id="emailToggle" onclick="toggleEmail()">
+                                        <span class="toggle-option active" data-value="yes">On</span>
+                                        <span class="toggle-option" data-value="no">Off</span>
+                                        <div class="toggle-slider"></div>
+                                    </button>
+                                    <input type="hidden" name="sendEmail" id="sendEmail" value="yes">
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -506,10 +519,11 @@
                                 <span class="summary-value">₹<span id="grandTotalDisplay">0</span></span>
                             </div>
                         </div>
-                        <button type="submit" class="btn-submit">
+                        <button type="button" class="btn-submit" id="generateInvoiceBtn">
                             <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">check_circle</i>
                             Generate Invoice
                         </button>
+                        <div id="alertContainer"></div>
                     </div>
                 </div>
             </div>
@@ -522,9 +536,74 @@
     </div>
 
     <script>
-        let rowCounter = 0;
+                        window.showAlert = function(message, type) {
+                            const alertContainer = document.getElementById('alertContainer');
+                            const alert = document.createElement('div');
+                            alert.className = `alert alert-${type}`;
+                            alert.innerHTML = `
+                                <i class="material-icons">${type === 'success' ? 'check_circle' : 'error'}</i>
+                                <span>${message}</span>
+                            `;
+                            alertContainer.appendChild(alert);
+                            setTimeout(() => alert.remove(), 6000);
+                        };
 
-        // Add first row on load
+                        document.getElementById('generateInvoiceBtn').addEventListener('click', async function() {
+                            // Gather invoice data from form
+                            const invoiceData = {
+                                customerName: document.getElementById('CustomerName').value,
+                                email: document.getElementById('Email').value,
+                                customerPhone: document.getElementById('PhoneNumber').value,
+                                customerAddress: document.getElementById('Address').value,
+                                totalAmount: document.getElementById('grandTotalDisplay').textContent,
+                                products: []
+                            };
+                            document.querySelectorAll('#productTableBody tr').forEach(row => {
+                                const rowId = row.id.replace('row', '');
+                                invoiceData.products.push({
+                                    noitem: rowId,
+                                    description: document.getElementById(`itemname${rowId}`).value,
+                                    hsn: document.getElementById(`size${rowId}`).value,
+                                    quantity: document.getElementById(`quantity${rowId}`).value,
+                                    salePrice: document.getElementById(`price${rowId}`).value,
+                                    distotal: document.getElementById(`discount${rowId}`).value,
+                                    GST: document.getElementById(`gst${rowId}`).value,
+                                    price: document.getElementById(`amount${rowId}`).value
+                                });
+                            });
+                            const transactionId = Date.now();
+                            const sendEmail = document.getElementById('sendEmail').value === 'yes';
+                            if (sendEmail) {
+                                // Only send email, do not download PDF
+                                if (window.generateInvoicePDF) {
+                                    await window.generateInvoicePDF(transactionId, invoiceData, true, true);
+                                } else {
+                                    window.showAlert('Invoice PDF generation function not found!', 'danger');
+                                }
+                            }
+                            // Redirect to order page after action
+                            window.location.href = '/orders';
+                        });
+                // Email toggle logic
+                function toggleEmail() {
+                    const toggleBtn = document.getElementById('emailToggle');
+                    const hiddenInput = document.getElementById('sendEmail');
+                    const options = toggleBtn.querySelectorAll('.toggle-option');
+                    toggleBtn.classList.toggle('online');
+                    if (toggleBtn.classList.contains('online')) {
+                        hiddenInput.value = 'no';
+                        options[0].classList.remove('active');
+                        options[1].classList.add('active');
+                    } else {
+                        hiddenInput.value = 'yes';
+                        options[0].classList.add('active');
+                        options[1].classList.remove('active');
+                    }
+                }
+        let rowCounter = 0;
+        let categories = [];
+        let brands = [];
+
         window.addEventListener('DOMContentLoaded', function() {
             // Set today's date in YYYY-MM-DD format for date input
             const today = new Date();
@@ -532,8 +611,23 @@
             const month = String(today.getMonth() + 1).padStart(2, '0');
             const day = String(today.getDate()).padStart(2, '0');
             document.getElementById('todayDate').value = `${year}-${month}-${day}`;
-            
+
+            // Add first row immediately
             addNewRow();
+
+            // Fetch categories and brands and set up autocomplete for all rows
+            fetch('/api/categories').then(res => res.json()).then(data => {
+                categories = Array.isArray(data) ? data : [];
+                document.querySelectorAll('input[id^="category"]').forEach(input => {
+                    setupAutocomplete(input, categories);
+                });
+            }).catch(() => {});
+            fetch('/api/brands').then(res => res.json()).then(data => {
+                brands = Array.isArray(data) ? data : [];
+                document.querySelectorAll('input[id^="brand"]').forEach(input => {
+                    setupAutocomplete(input, brands);
+                });
+            }).catch(() => {});
         });
 
         // Toggle payment method
@@ -566,7 +660,7 @@
                 })
                 .then(res => res.json())
                 .then(data => {
-                    if (data.success && data.rows && data.rows.length > 0) {
+                    if (data.status === 200 && data.rows && data.rows.length > 0) {
                         const customer = data.rows[0];
                         document.getElementById('CustomerName').value = customer.CustomerName || '';
                         document.getElementById('Email').value = customer.Email || '';
@@ -574,29 +668,10 @@
                         document.getElementById('Pincode').value = customer.Pincode || '';
                         document.getElementById('CGST').value = customer.CGST || '';
                     }
-                });
+                })
+                .catch(err => console.error('Error fetching customer:', err));
             }
         });
-
-        // Autocomplete lists from backend
-        const categoryList = <%- JSON.stringify(category.map(c => c.Category || c)) %>;
-        const brandList = <%- JSON.stringify(brand.map(b => b.Brand || b)) %>;
-
-        function createAutocomplete(input, list) {
-            input.addEventListener('input', function() {
-                const val = this.value.toLowerCase();
-                let matches = list.filter(item => item.toLowerCase().includes(val) && val.length > 0);
-                let datalistId = input.id + '_datalist';
-                let datalist = document.getElementById(datalistId);
-                if (!datalist) {
-                    datalist = document.createElement('datalist');
-                    datalist.id = datalistId;
-                    document.body.appendChild(datalist);
-                    input.setAttribute('list', datalistId);
-                }
-                datalist.innerHTML = matches.map(m => `<option value="${m}">`).join('');
-            });
-        }
 
         function addNewRow() {
             rowCounter++;
@@ -607,8 +682,8 @@
                 <td style="text-align: center; font-weight: 700;">${rowCounter}</td>
                 <td><input type="text" name="id${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Scan/Enter ID" required></td>
                 <td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="e.g. Tempered Glass, Phone Case"></td>
-                <td><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="e.g. Screen Protector" autocomplete="off"></td>
-                <td><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="e.g. Samsung, Apple" autocomplete="off"></td>
+                <td style="position: relative;"><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="e.g. Screen Protector"></td>
+                <td style="position: relative;"><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="e.g. Samsung, Apple"></td>
                 <td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Model/Size"></td>
                 <td><input type="number" name="price${rowCounter}" id="price${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0.00" step="0.01"></td>
                 <td><input type="number" name="unit${rowCounter}" id="quantity${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="1" min="1" value="1" required></td>
@@ -633,12 +708,23 @@
             });
 
             row.querySelectorAll('.calc-input').forEach(input => {
-                input.addEventListener('input', () => calculateRow(rowCounter));
+                input.addEventListener('input', () => {
+                    calculateRow(rowCounter);
+                });
             });
 
-            // Autocomplete for category and brand
-            createAutocomplete(row.querySelector(`#category${rowCounter}`), categoryList);
-            createAutocomplete(row.querySelector(`#brand${rowCounter}`), brandList);
+            // Setup autocomplete for category and brand if data is available
+            const categoryInput = document.getElementById(`category${rowCounter}`);
+            const brandInput = document.getElementById(`brand${rowCounter}`);
+            if (categoryInput && Array.isArray(categories) && categories.length > 0) {
+                setupAutocomplete(categoryInput, categories);
+            }
+            if (brandInput && Array.isArray(brands) && brands.length > 0) {
+                setupAutocomplete(brandInput, brands);
+            }
+
+            // Recalculate grand total after adding a row
+            calculateGrandTotal();
         }
 
         function fetchItemDetails(itemId, rowNum) {
@@ -660,6 +746,10 @@
                 } else {
                     showAlert('Item not found!', 'danger');
                 }
+            })
+            .catch(err => {
+                console.error('Error fetching item:', err);
+                showAlert('Error fetching item details', 'danger');
             });
         }
 
@@ -723,6 +813,8 @@
                     tr.querySelector('td:first-child').textContent = index + 1;
                 });
             }
+            // Recalculate grand total after deleting a row
+            calculateGrandTotal();
         }
 
         function showAlert(message, type) {
@@ -736,7 +828,116 @@
             alertContainer.appendChild(alert);
             setTimeout(() => alert.remove(), 5000);
         }
+
+        // Autocomplete functionality
+        // ...existing code...
+
+        // Setup autocomplete for an input
+        function setupAutocomplete(input, suggestions) {
+            let currentFocus = -1;
+            if (!Array.isArray(suggestions) || suggestions.length === 0) return;
+
+            input.addEventListener('input', function() {
+                const val = this.value;
+                closeAllLists();
+                if (!val) return;
+
+                currentFocus = -1;
+                const list = document.createElement('div');
+                list.setAttribute('id', this.id + 'autocomplete-list');
+                list.setAttribute('class', 'autocomplete-items');
+                this.parentNode.appendChild(list);
+
+                const matches = suggestions.filter(s =>
+                    typeof s === 'string' && s.toLowerCase().includes(val.toLowerCase())
+                ).slice(0, 10);
+
+                matches.forEach(item => {
+                    const div = document.createElement('div');
+                    div.innerHTML = item;
+                    div.addEventListener('click', function() {
+                        input.value = item;
+                        closeAllLists();
+                    });
+                    list.appendChild(div);
+                });
+            });
+
+            input.addEventListener('keydown', function(e) {
+                let list = document.getElementById(this.id + 'autocomplete-list');
+                if (list) list = list.getElementsByTagName('div');
+                if (e.keyCode == 40) { // Down
+                    currentFocus++;
+                    addActive(list);
+                } else if (e.keyCode == 38) { // Up
+                    currentFocus--;
+                    addActive(list);
+                } else if (e.keyCode == 13) { // Enter
+                    e.preventDefault();
+                    if (currentFocus > -1 && list) list[currentFocus].click();
+                }
+            });
+
+            function addActive(list) {
+                if (!list) return;
+                removeActive(list);
+                if (currentFocus >= list.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = list.length - 1;
+                list[currentFocus].classList.add('autocomplete-active');
+            }
+
+            function removeActive(list) {
+                for (let i = 0; i < list.length; i++) {
+                    list[i].classList.remove('autocomplete-active');
+                }
+            }
+
+            function closeAllLists(except) {
+                const items = document.getElementsByClassName('autocomplete-items');
+                for (let i = 0; i < items.length; i++) {
+                    if (except != items[i] && except != input) {
+                        items[i].parentNode.removeChild(items[i]);
+                    }
+                }
+            }
+
+            document.addEventListener('click', function(e) {
+                closeAllLists(e.target);
+            });
+        }
     </script>
+    
+    <style>
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #d4d4d4;
+            border-top: none;
+            z-index: 99999;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 250px;
+            overflow-y: auto;
+            background: white;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+        }
+        .autocomplete-items div {
+            padding: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 15px;
+        }
+        .autocomplete-items div:hover {
+            background-color: #e9ecef;
+        }
+        .autocomplete-active {
+            background-color: #6366f1 !important;
+            color: white;
+        }
+        td {
+            position: relative;
+        }
+    </style>
 </main>
 
 <%- include('footer') %>
