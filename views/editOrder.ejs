@@ -67,49 +67,50 @@
     </style>
 
     <div class="page-header">
-        <h1>Edit Order - Item #<%= orderData.ItemID %></h1>
+        <h1>Edit Order - Transaction #<%= orderItems && orderItems.length > 0 ? orderItems[0].TransactionID : '' %></h1>
     </div>
 
     <div class="form-card">
-        <h3 style="margin-bottom: 20px; color: var(--dark); font-weight: 600;">Order Information</h3>
+        <h3 style="margin-bottom: 20px; color: var(--dark); font-weight: 600;">Order Items</h3>
         <form action="/edititem" method="POST">
-            <input type="hidden" name="itemID" value="<%= orderData.ItemID %>">
-            <input type="hidden" name="transactionID" value="<%= orderData.TransactionID %>">
-            
-            <div class="form-grid">
+            <input type="hidden" name="transactionID" value="<%= orderItems && orderItems.length > 0 ? orderItems[0].TransactionID : '' %>">
+            <% orderItems.forEach(function(item, idx) { %>
+            <div class="form-grid" style="border-bottom:1px solid #eee; margin-bottom:24px; padding-bottom:16px;">
+                <input type="hidden" name="itemID[]" value="<%= item.ItemID %>">
+                <input type="hidden" name="_id[]" value="<%= item._id %>">
                 <div class="form-group">
                     <label class="form-label">Item ID</label>
-                    <input type="text" name="itemID" class="form-input" value="<%= orderData.ItemID %>" readonly>
+                    <input type="text" name="itemID_display[]" class="form-input" value="<%= item.ItemID %>" readonly>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Bill Date</label>
-                    <input type="text" name="billDate" class="form-input" value="<%= orderData.BillDate %>" required>
+                    <input type="text" name="billDate[]" class="form-input" value="<%= item.BillDate %>" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Item Name</label>
-                    <input type="text" name="itemName" class="form-input" value="<%= orderData.ItemName %>" required>
+                    <input type="text" name="itemName[]" class="form-input" value="<%= item.ItemName %>" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Category</label>
-                    <input type="text" name="category" class="form-input" value="<%= orderData.Category %>" required>
+                    <input type="text" name="category[]" class="form-input" value="<%= item.Category %>" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Brand</label>
-                    <input type="text" name="brand" class="form-input" value="<%= orderData.Brand %>" required>
+                    <input type="text" name="brand[]" class="form-input" value="<%= item.Brand %>" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Size</label>
-                    <input type="text" name="size" class="form-input" value="<%= orderData.Size %>" required>
+                    <input type="text" name="size[]" class="form-input" value="<%= item.Size %>" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Price</label>
-                    <input type="number" step="0.01" name="price" class="form-input" value="<%= orderData.Price %>" required>
+                    <input type="number" step="0.01" name="price[]" class="form-input" value="<%= item.Price %>" required>
                 </div>
             </div>
+            <% }); %>
 
             <h3 style="margin: 32px 0 20px; color: var(--dark); font-weight: 600;">Customer Information</h3>
-            <input type="hidden" name="id" value="<%= customerData._id %>">
-            
+            <input type="hidden" name="customer_id" value="<%= customerData._id %>">
             <div class="form-grid">
                 <div class="form-group">
                     <label class="form-label">Customer Name</label>
@@ -124,7 +125,6 @@
                     <input type="email" name="customerEmail" class="form-input" value="<%= customerData.Email %>" required>
                 </div>
             </div>
-
             <button type="submit" class="btn-submit">Update Order</button>
         </form>
     </div>

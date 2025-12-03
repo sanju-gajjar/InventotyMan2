@@ -1,6 +1,23 @@
 <%- include('header', { pageTitle: 'Dashboard' }) %>
 
 <main class="app-main">
+        <div style="margin-bottom: 24px;">
+            <form id="dashboardFilterForm" method="GET" action="/">
+                <label for="period" style="font-weight:600; margin-right:12px;">Show Data For:</label>
+                <select name="period" id="period" style="padding:8px 16px; border-radius:8px;">
+                    <% 
+                        const now = new Date();
+                        const currentFY = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+                        for (let fy = currentFY; fy >= currentFY - 3; fy--) {
+                    %>
+                        <option value="fy<%= fy %>" <%= period === ('fy' + fy) ? 'selected' : '' %>>FY <%= fy - 1 %>-<%= fy %></option>
+                    <% } %>
+                    <option value="lastmonth" <%= period === 'lastmonth' ? 'selected' : '' %>>Last Month</option>
+                    <option value="last3months" <%= period === 'last3months' ? 'selected' : '' %>>Last 3 Months</option>
+                </select>
+                <button type="submit" style="margin-left:16px; padding:8px 20px; border-radius:8px; background:var(--primary); color:white; border:none; font-weight:600;">Apply</button>
+            </form>
+        </div>
     <style>
         .page-header {
             background: white;
@@ -183,6 +200,19 @@
     <div class="page-header">
         <h1>Dashboard</h1>
         <p>Welcome back, <%= user.user %>! Here's your business overview.</p>
+        <p style="font-size:14px; color:var(--gray-500); margin-top:8px;">
+            Showing data for: <strong>
+            <% if (period && period.startsWith('fy')) { %>
+                FY <%= parseInt(period.replace('fy','')) - 1 %>-<%= period.replace('fy','') %>
+            <% } else if (period === 'lastmonth') { %>
+                Last Month
+            <% } else if (period === 'last3months') { %>
+                Last 3 Months
+            <% } else { %>
+                Current Financial Year
+            <% } %>
+            </strong>
+        </p>
     </div>
 
     <!-- Stats Cards -->

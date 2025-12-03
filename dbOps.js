@@ -5,91 +5,110 @@ function getUserRole(req) {
 }
 exports.getHomePage = function (req,callback) {
     const stockCollection = db.collection('stocks');
-    try {
-        stockCollection.find({}).toArray((err, resultStocksCount) => {
-            if (err) {
-                console.log(err);
-            }
-            const pipelineStock = [{
-                $addFields: {
-                    total: {
-                        $multiply: ["$Amount", "$Size"]
-                    }
-                }
-            },
-            {
-                $group: {
-                    _id: '_id',
-                    TotalItemsOrdered: {
-                        $sum: '$total'
-                    }
-                }
-            }
-            ];
-            stockCollection.aggregate(pipelineStock).toArray((err, resultStock) => {
-                if (err) {
-                    console.error('Error executing aggregation:', err);
-                    return;
-                }
-                const ordersCollection = db.collection('orders');
-
-                ordersCollection.find({}).toArray((err, resultCount) => {
-
-                    const pipeline = [{
-                        $addFields: {
-                            total: {
-                                $multiply: ["$Amount", "$Size"]
-                            }
-                            // Calculate amount * size and store in a new field called "total"
-                        }
-                    }, {
-                        $group: {
-                            _id: '_id',
-                            TotalItemsOrdered: {
-                                $sum: '$total'
-                            }
-                        }
-                    }];
-                    ordersCollection.aggregate(pipeline).toArray((err, result) => {
-                        if (err) {
-                            console.error('Error executing aggregation:', err);
-
-                            return;
-                        }
-
-                        if (resultStock.length > 0) {
-                            var returnData = {
-                                user: getUserRole(req),
-                                total_sales: result,
-                                ord_num: [{
-                                    NumberOfProducts: (resultCount != null && resultCount != undefined) ? resultCount.length : 0
-                                }
-                                ],
-                                stock_num: [{
-                                    NumberOfProducts: (resultStocksCount.length != null && resultStocksCount.length != undefined) ? resultStocksCount.length : 0
-                                }
-                                ],
-                                total_stock: resultStock,
-                            }
-                            callback(err, returnData);
-                            // res.render('index.ejs', returnData);
-                        } else {
-                            var returnData = {
-                                user: getUserRole(req),
-                                total_sales: [],
-                                ord_num: [],
-                                stock_num: [],
-                                total_stock: []
-                            };
-                            callback(err, returnData);
-                        }
-                    });
-                });
-            });
-        });
-    } catch (error) {
-        console.log(error);
+    // Determine filter period
+    const period = req.query.period || 'currentFY';
+    const now = new Date();
+    let startDate, endDate;
+    if (period.startsWith('fy')) {
+        // Financial year: fy2024 means 1 Apr 2023 to 31 Mar 2024
+        const fy = parseInt(period.replace('fy', ''));
+        startDate = new Date(fy - 1, 3, 1); // April 1, previous year
+        endDate = new Date(fy, 2, 31, 23, 59, 59); // March 31, fy year
+    } else if (period === 'last3months') {
+        endDate = now;
+        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    } else if (period === 'lastmonth') {
+        endDate = now;
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    } else {
+        // Default: current financial year
+        const fy = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+        startDate = new Date(fy - 1, 3, 1);
+        endDate = new Date(fy, 2, 31, 23, 59, 59);
     }
+
+    // Stock pipeline (all stock, not date filtered)
+    stockCollection.find({}).toArray((err, resultStocksCount) => {
+      if (err) {
+        console.log(err);
+      }
+      const pipelineStock = [
+        { $addFields: { total: { $multiply: ["$Amount", "$Size"] } } },
+        { $group: { _id: '_id', TotalItemsOrdered: { $sum: '$total' } } }
+      ];
+      stockCollection.aggregate(pipelineStock).toArray((err, resultStock) => {
+        if (err) {
+          console.error('Error executing aggregation:', err);
+          return;
+        }
+        const ordersCollection = db.collection('orders');
+        // Orders pipeline: parse BillDate and filter
+        // Helper: parse BillDate as DD/MM/YYYY or fallback to YYYY-MM-DD
+        const pipeline = [
+          {
+            $addFields: {
+              BillDateObj: {
+                $cond: [
+                  { $regexMatch: { input: "$BillDate", regex: "/\\d{2}\\/\\d{2}\\/\\d{4}/" } },
+                  { $dateFromString: { dateString: "$BillDate", format: "%d/%m/%Y" } },
+                  { $dateFromString: { dateString: "$BillDate", format: "%Y-%m-%d" } }
+                ]
+              },
+              total: { $multiply: ["$Amount", "$Size"] }
+            }
+          },
+          {
+            $match: {
+              BillDateObj: { $gte: startDate, $lte: endDate }
+            }
+          },
+          {
+            $group: {
+              _id: '_id',
+              TotalItemsOrdered: { $sum: "$total" }
+            }
+          }
+        ];
+        // For order count
+        const countPipeline = [
+          {
+            $addFields: {
+              BillDateObj: {
+                $cond: [
+                  { $regexMatch: { input: "$BillDate", regex: "/\\d{2}\\/\\d{2}\\/\\d{4}/" } },
+                  { $dateFromString: { dateString: "$BillDate", format: "%d/%m/%Y" } },
+                  { $dateFromString: { dateString: "$BillDate", format: "%Y-%m-%d" } }
+                ]
+              }
+            }
+          },
+          {
+            $match: {
+              BillDateObj: { $gte: startDate, $lte: endDate }
+            }
+          }
+        ];
+        ordersCollection.aggregate(countPipeline).toArray((err, resultCount) => {
+          ordersCollection.aggregate(pipeline).toArray((err, result) => {
+            if (err) {
+              console.error('Error executing aggregation:', err);
+              return;
+            }
+            var returnData = {
+              user: getUserRole(req),
+              total_sales: result,
+              ord_num: [{ NumberOfProducts: resultCount ? resultCount.length : 0 }],
+              stock_num: [{ NumberOfProducts: (resultStocksCount.length != null && resultStocksCount.length != undefined) ? resultStocksCount.length : 0 }],
+              total_stock: resultStock,
+              period: period,
+              startDate: startDate,
+              endDate: endDate
+            };
+            callback(err, returnData);
+          });
+        });
+      });
+    });
 }
 exports.getOrderPage = function (req, callback) { 
     const ordersCollection = db.collection('orders');

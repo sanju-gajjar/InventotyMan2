@@ -562,20 +562,41 @@
                 fetch('/fetchcustomer', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phonenumber: phone })
+                    body: JSON.stringify({ PhoneNumber: phone })
                 })
                 .then(res => res.json())
                 .then(data => {
-                    if (data.success && data.customer) {
-                        document.getElementById('CustomerName').value = data.customer.CustomerName || '';
-                        document.getElementById('Email').value = data.customer.Email || '';
-                        document.getElementById('Address').value = data.customer.Address || '';
-                        document.getElementById('Pincode').value = data.customer.Pincode || '';
-                        document.getElementById('CGST').value = data.customer.CGST || '';
+                    if (data.success && data.rows && data.rows.length > 0) {
+                        const customer = data.rows[0];
+                        document.getElementById('CustomerName').value = customer.CustomerName || '';
+                        document.getElementById('Email').value = customer.Email || '';
+                        document.getElementById('Address').value = customer.Address || '';
+                        document.getElementById('Pincode').value = customer.Pincode || '';
+                        document.getElementById('CGST').value = customer.CGST || '';
                     }
                 });
             }
         });
+
+        // Autocomplete lists from backend
+        const categoryList = <%- JSON.stringify(category.map(c => c.Category || c)) %>;
+        const brandList = <%- JSON.stringify(brand.map(b => b.Brand || b)) %>;
+
+        function createAutocomplete(input, list) {
+            input.addEventListener('input', function() {
+                const val = this.value.toLowerCase();
+                let matches = list.filter(item => item.toLowerCase().includes(val) && val.length > 0);
+                let datalistId = input.id + '_datalist';
+                let datalist = document.getElementById(datalistId);
+                if (!datalist) {
+                    datalist = document.createElement('datalist');
+                    datalist.id = datalistId;
+                    document.body.appendChild(datalist);
+                    input.setAttribute('list', datalistId);
+                }
+                datalist.innerHTML = matches.map(m => `<option value="${m}">`).join('');
+            });
+        }
 
         function addNewRow() {
             rowCounter++;
@@ -586,8 +607,8 @@
                 <td style="text-align: center; font-weight: 700;">${rowCounter}</td>
                 <td><input type="text" name="id${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Scan/Enter ID" required></td>
                 <td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="e.g. Tempered Glass, Phone Case"></td>
-                <td><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="e.g. Screen Protector"></td>
-                <td><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="e.g. Samsung, Apple"></td>
+                <td><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="e.g. Screen Protector" autocomplete="off"></td>
+                <td><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="e.g. Samsung, Apple" autocomplete="off"></td>
                 <td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Model/Size"></td>
                 <td><input type="number" name="price${rowCounter}" id="price${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0.00" step="0.01"></td>
                 <td><input type="number" name="unit${rowCounter}" id="quantity${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="1" min="1" value="1" required></td>
@@ -614,6 +635,10 @@
             row.querySelectorAll('.calc-input').forEach(input => {
                 input.addEventListener('input', () => calculateRow(rowCounter));
             });
+
+            // Autocomplete for category and brand
+            createAutocomplete(row.querySelector(`#category${rowCounter}`), categoryList);
+            createAutocomplete(row.querySelector(`#brand${rowCounter}`), brandList);
         }
 
         function fetchItemDetails(itemId, rowNum) {

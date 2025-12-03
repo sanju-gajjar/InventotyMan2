@@ -1,26 +1,18 @@
 if (process.env.NODE_ENV !== 'production') {
-    require('dotenv').config()
+    require('dotenv').config();
 }
-// const Recipient = require("mailersend").Recipient;
-// const EmailParams = require("mailersend").EmailParams;
-// const MailerSend = require("mailersend").MailerSend;
-// const Sender = require("mailersend").Sender;
 const nodemailer = require('nodemailer');
-
-
 const express = require('express');
 const webpack = require('webpack');
 const bwipjs = require('bwip-js');
 const webpackConfig = require('./webpack.config.js');
-const {
-    MongoClient
-} = require('mongodb');
-var ObjectID = require('mongodb').ObjectID;
+const { MongoClient } = require('mongodb');
+const ObjectID = require('mongodb').ObjectID;
 const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const cookieParser = require('cookie-parser');
-let favicon = require('serve-favicon');
+const favicon = require('serve-favicon');
 const compression = require('compression');
 const ejs = require('ejs');
 const fs = require('fs');
@@ -31,11 +23,10 @@ app.use(require('webpack-dev-middleware')(compiler, {
     publicPath: webpackConfig.output.publicPath
 }));
 const port = process.env.PORT || 3000;
-
 app.use(bodyParser.json({ limit: '10mb' }));
-app.use(express.static("public"));
+app.use(express.static('public'));
 app.set('views', './views');
-app.set('view-engine', 'ejs');
+app.set('view engine', 'ejs');
 app.use(compression());
 app.use(favicon(__dirname + '/public/favicon.ico'));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -389,27 +380,27 @@ app.get('/edititem', checkAuthenticated, (req, res) => {
     const customerCollection = db.collection("customer");
 
     const edititemid = req.query.edititemid;
-
     var objectId2 = new ObjectID(edititemid);
-    ordersCollection.find({
-        _id: objectId2
-    }).toArray((err1, rows1) => { 
-        console.log('editing order ' + edititemid);
-        if (err1) {
+    // First, find the item by _id to get its TransactionID
+    ordersCollection.findOne({ _id: objectId2 }, (err1, item) => {
+        if (err1 || !item) {
             console.error('Error editing value:', err1);
-
             return;
         }
-        customerCollection
-          .find({ PhoneNumber: rows1[0].CustomerPhone })
-          .toArray((err1, rows2) => {
-            res.render("editOrder.ejs", {
-              user: getUserRole(req),
-              orderData: rows1[0],
-              customerData: rows2[0]
+        // Now, find all items with the same TransactionID
+        ordersCollection.find({ TransactionID: item.TransactionID }).toArray((err2, items) => {
+            if (err2 || !items || items.length === 0) {
+                console.error('Error fetching order items:', err2);
+                return;
+            }
+            customerCollection.find({ PhoneNumber: items[0].CustomerPhone }).toArray((err3, customers) => {
+                res.render("editOrder.ejs", {
+                    user: getUserRole(req),
+                    orderItems: items,
+                    customerData: customers[0]
+                });
             });
-          });
-    
+        });
     });
     // ordersCollection.find({
     //     _id: objectId2
@@ -419,55 +410,68 @@ app.get('/edititem', checkAuthenticated, (req, res) => {
     // });
 });
 app.post('/edititem', checkAuthenticated, (req, res) => {
-    const { itemID, itemName, transactionID, billDate, category, brand, size, price, id, customerPhone, customerEmail, customerName } = req.body;
+        const ordersCollection = db.collection('orders');
+        const customerCollection = db.collection("customer");
 
-    // Assuming 'Order' is your MongoDB model
-    const ordersCollection = db.collection('orders');
-    const customerCollection = db.collection("customer");
+        // Arrays for multiple items
+        const itemIDs = req.body["itemID[]"] || req.body.itemID;
+        const _ids = req.body["_id[]"] || req.body._id;
+        const billDates = req.body["billDate[]"] || req.body.billDate;
+        const itemNames = req.body["itemName[]"] || req.body.itemName;
+        const categories = req.body["category[]"] || req.body.category;
+        const brands = req.body["brand[]"] || req.body.brand;
+        const sizes = req.body["size[]"] || req.body.size;
+        const prices = req.body["price[]"] || req.body.price;
+        const transactionID = req.body.transactionID;
 
-    // Update the document based on the itemID
-    ordersCollection.findOneAndUpdate(
-      { ItemID: itemID, TransactionID: transactionID },
-      {
-        $set: {
-          ItemName: itemName,
-          Category: category,
-          Brand: brand,
-          BillDate: billDate,
-          Size: parseInt(size),
-          Price: parseFloat(price),
-          Amount: parseFloat(price) * parseFloat(size),
-          CustomerPhone: customerPhone,
-          customerEmail: customerEmail
+        // Update all items
+        let updatePromises = [];
+        for (let i = 0; i < itemIDs.length; i++) {
+                updatePromises.push(
+                        ordersCollection.updateOne(
+                                { _id: new ObjectID(_ids[i]) },
+                                {
+                                        $set: {
+                                                ItemID: itemIDs[i],
+                                                ItemName: itemNames[i],
+                                                Category: categories[i],
+                                                Brand: brands[i],
+                                                BillDate: billDates[i],
+                                                Size: parseInt(sizes[i]),
+                                                Price: parseFloat(prices[i]),
+                                                Amount: parseFloat(prices[i]) * parseFloat(sizes[i])
+                                        }
+                                }
+                        )
+                );
         }
-      },
-      { new: true }, // Return the modified document
-      (err, updatedOrder) => {
-        if (err) {
-          console.error("Error updating order:", err);
-          return res.status(500).send("Internal Server Error");
-        }
-        customerCollection.findOneAndUpdate(
-          { _id: new ObjectID(id) },
-          {
-            $set: {
-              PhoneNumber: customerPhone,
-              Email: customerEmail,
-              CustomerName: customerName
-            }
-          },
-          { new: true }, // Return the modified document
-          (err, updatedOrder) => {
-            if (err) {
-              console.error("Error updating customer:", err);
-              return res.status(500).send("Internal Server Error");
-            }
-          }
-        );
-        // Handle the updated order as needed
-        res.redirect("/orders");
-      }
-    );
+
+        // Update customer info
+        const customer_id = req.body.customer_id;
+        const customerPhone = req.body.customerPhone;
+        const customerEmail = req.body.customerEmail;
+        const customerName = req.body.customerName;
+
+        Promise.all(updatePromises)
+                .then(() => {
+                        return customerCollection.updateOne(
+                                { _id: new ObjectID(customer_id) },
+                                {
+                                        $set: {
+                                                PhoneNumber: customerPhone,
+                                                Email: customerEmail,
+                                                CustomerName: customerName
+                                        }
+                                }
+                        );
+                })
+                .then(() => {
+                        res.redirect("/orders");
+                })
+                .catch((err) => {
+                        console.error("Error updating order or customer:", err);
+                        res.status(500).send("Internal Server Error");
+                });
 });
 app.get('/orders_query', checkAuthenticated, (req, res) => {
     res.redirect('/orders');
@@ -594,30 +598,54 @@ app.get('/backup', (req, res) => {
 app.get('/export/csv', async (req, res) => {
     // Fetch all collections in the database
     const collections = await db.listCollections().toArray();
-
-    const csvStream = fs.createWriteStream('exported_data.csv');
-
-    // Write headers to CSV
-    csvStream.write('Collection,Data\n');
+    let allRows = [];
+    let allHeaders = new Set();
+    let collectionRows = {};
 
     for (const collection of collections) {
-        const cursor = db.collection(collection.name).find();
+        const docs = await db.collection(collection.name).find().toArray();
+        if (docs.length === 0) continue;
+        // Collect all field names
+        docs.forEach(doc => {
+            Object.keys(doc).forEach(key => allHeaders.add(key));
+        });
+        collectionRows[collection.name] = docs;
+    }
 
-        await cursor.forEach(doc => {
-            // Write data to CSV
-            csvStream.write(`${collection.name},"${JSON.stringify(doc)}"\n`);
+    // Prepare header row: Collection + all unique field names
+    const headers = ['Collection', ...Array.from(allHeaders)];
+    allRows.push(headers);
+
+    // Prepare data rows
+    for (const [collectionName, docs] of Object.entries(collectionRows)) {
+        docs.forEach(doc => {
+            let row = [collectionName];
+            headers.slice(1).forEach(h => {
+                let val = doc[h];
+                if (typeof val === 'object' && val !== null) {
+                    val = JSON.stringify(val);
+                }
+                row.push(val !== undefined ? String(val).replace(/\n/g, ' ') : '');
+            });
+            allRows.push(row);
         });
     }
 
-    csvStream.end();
-    //client.close();
+    // Convert to CSV string
+    function escapeCSV(val) {
+        if (val == null) return '';
+        val = String(val);
+        if (val.includes(',') || val.includes('"')) {
+            return '"' + val.replace(/"/g, '""') + '"';
+        }
+        return val;
+    }
+    const csvString = allRows.map(row => row.map(escapeCSV).join(',')).join('\n');
 
     // Set response headers for CSV download
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=exported_data.csv');
-
-    // Pipe the CSV file to the response
-    fs.createReadStream('exported_data.csv').pipe(res);
+    res.send(csvString);
 });
 
 app.post('/stock_filter_query', checkAuthenticated, (req, res) => {
