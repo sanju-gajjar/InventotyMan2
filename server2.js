@@ -1190,31 +1190,45 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
 
     });
 });
-// TEMP: Test mail route for debugging email delivery
-app.get('/testmail', async (req, res) => {
-    let transporter = require('nodemailer').createTransport({
-        host: process.env.ehost,
-        port: 587,
-        secure: false,
-        auth: {
-            user: process.env.euser,
-            pass: process.env.pass
-        }
-    });
-    try {
-        let info = await transporter.sendMail({
-            from: 'keyurgajjar91@gmail.com',
-            to: 'sanju.gajjar2@gmail.com',
-            subject: 'Test Email from InventoryMan2',
-            text: 'This is a test email sent at ' + new Date().toLocaleString(),
-            html: '<b>This is a test email sent at ' + new Date().toLocaleString() + '</b>'
-        });
-        res.json({ success: true, messageId: info.messageId, response: info.response });
-    } catch (err) {
-        console.error('Test mail error:', err);
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
+// // TEMP: Test mail route for debugging email delivery
+// app.get('/testmail', async (req, res) => {
+//     // Log SMTP config for debugging
+//     console.log('SMTP config:', {
+//         ehost: process.env.ehost,
+//         euser: process.env.euser,
+//         pass: process.env.pass
+//     });
+//     let transporter = require('nodemailer').createTransport({
+//         host: process.env.ehost,
+//         port: 587,
+//         secure: false,
+//         auth: {
+//             user: process.env.euser,
+//             pass: process.env.pass
+//         }
+//     });
+//     try {
+//         let info = await transporter.sendMail({
+//             from: process.env.euser,
+//             to: 'sanju.gajjar2@gmail.com',
+//             subject: 'Test Email from InventoryMan2',
+//             text: 'This is a test email sent at ' + new Date().toLocaleString(),
+//             html: '<b>This is a test email sent at ' + new Date().toLocaleString() + '</b>'
+//         });
+//         res.json({ success: true, messageId: info.messageId, response: info.response });
+//     } catch (err) {
+//         console.error('Test mail error:', err);
+//         res.status(500).json({
+//             success: false,
+//             error: err.message,
+//             smtpConfig: {
+//                 ehost: process.env.ehost,
+//                 euser: process.env.euser,
+//                 pass: process.env.pass
+//             }
+//         });
+//     }
+// });
 app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
     //   fetchOrderItem(req, async (err, result) => {
     const filename = req.body.data.filename;
