@@ -549,40 +549,108 @@
                         };
 
                         document.getElementById('generateInvoiceBtn').addEventListener('click', async function() {
-                            // Gather invoice data from form
+                            const form = document.getElementById('billingForm');
+                            
+                            // Validate required fields
+                            if (!form.checkValidity()) {
+                                form.reportValidity();
+                                return;
+                            }
+                            
+                            // Check if at least one product is added
+                            const rows = document.querySelectorAll('#productTableBody tr');
+                            if (rows.length === 0) {
+                                window.showAlert('Please add at least one product!', 'danger');
+                                return;
+                            }
+                            
+                            // Gather invoice data from form for PDF generation
                             const invoiceData = {
                                 customerName: document.getElementById('CustomerName').value,
                                 email: document.getElementById('Email').value,
                                 customerPhone: document.getElementById('PhoneNumber').value,
                                 customerAddress: document.getElementById('Address').value,
                                 totalAmount: document.getElementById('grandTotalDisplay').textContent,
+                                billDate: document.getElementById('todayDate').value,
                                 products: []
                             };
-                            document.querySelectorAll('#productTableBody tr').forEach(row => {
+                            
+                            rows.forEach(row => {
                                 const rowId = row.id.replace('row', '');
-                                invoiceData.products.push({
-                                    noitem: rowId,
-                                    description: document.getElementById(`itemname${rowId}`).value,
-                                    hsn: document.getElementById(`size${rowId}`).value,
-                                    quantity: document.getElementById(`quantity${rowId}`).value,
-                                    salePrice: document.getElementById(`price${rowId}`).value,
-                                    distotal: document.getElementById(`discount${rowId}`).value,
-                                    GST: document.getElementById(`gst${rowId}`).value,
-                                    price: document.getElementById(`amount${rowId}`).value
-                                });
-                            });
-                            const transactionId = Date.now();
-                            const sendEmail = document.getElementById('sendEmail').value === 'yes';
-                            if (sendEmail) {
-                                // Only send email, do not download PDF
-                                if (window.generateInvoicePDF) {
-                                    await window.generateInvoicePDF(transactionId, invoiceData, true, true);
-                                } else {
-                                    window.showAlert('Invoice PDF generation function not found!', 'danger');
+                                const itemName = document.getElementById(`itemname${rowId}`).value;
+                                if (itemName) {
+                                    invoiceData.products.push({
+                                        noitem: rowId,
+                                        description: itemName,
+                                        hsn: document.getElementById(`size${rowId}`).value,
+                                        quantity: document.getElementById(`quantity${rowId}`).value,
+                                        salePrice: document.getElementById(`price${rowId}`).value,
+                                        distotal: document.getElementById(`discount${rowId}`).value,
+                                        GST: document.getElementById(`gst${rowId}`).value,
+                                        price: document.getElementById(`amount${rowId}`).value
+                                    });
                                 }
+                            });
+                            
+                            // Disable button to prevent double submission
+                            this.disabled = true;
+                            this.textContent = 'Processing...';
+                            
+                            try {
+                                // First, submit the form via AJAX to save order
+                                // Use form.elements which is more reliable than querySelectorAll
+                                const formData = {};
+                                
+                                // Method 1: Use form.elements (more reliable)
+                                for (let elem of form.elements) {
+                                    if (elem.name) {
+                                        if (elem.type === 'checkbox' || elem.type === 'radio') {
+                                            if (elem.checked) {
+                                                formData[elem.name] = elem.value;
+                                            }
+                                        } else if (elem.type !== 'button' && elem.type !== 'submit') {
+                                            formData[elem.name] = elem.value;
+                                        }
+                                    }
+                                }
+                                
+                                // Ensure toggle states are included
+                                const sendEmailElem = document.getElementById('sendEmail');
+                                const onlinePaymentElem = document.getElementById('onlinePayment');
+                                if (sendEmailElem) formData.sendEmail = sendEmailElem.value;
+                                if (onlinePaymentElem) formData.onlinePayment = onlinePaymentElem.value;
+                                
+                                console.log('DEBUG: Form data to be sent:', formData);
+                                console.log('DEBUG: Data keys:', Object.keys(formData));
+                                console.log('DEBUG: Data as JSON:', JSON.stringify(formData));
+                                
+                                const response = await fetch('/submitbill', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify(formData)
+                                });
+                                
+                                if (!response.ok) {
+                                    const error = await response.json();
+                                    window.showAlert('Error submitting bill: ' + (error.error || 'Unknown error'), 'danger');
+                                    this.disabled = false;
+                                    this.innerHTML = '<i class="material-icons" style="vertical-align: middle; margin-right: 8px;">check_circle</i>Generate Invoice';
+                                    return;
+                                }
+                                
+                                // Show success and redirect to orders
+                                window.showAlert('Bill submitted successfully!', 'success');
+                                setTimeout(() => {
+                                    window.location.href = '/orders';
+                                }, 1500);
+                            } catch (err) {
+                                console.error('Error:', err);
+                                window.showAlert('Error: ' + err.message, 'danger');
+                                this.disabled = false;
+                                this.innerHTML = '<i class="material-icons" style="vertical-align: middle; margin-right: 8px;">check_circle</i>Generate Invoice';
                             }
-                            // Redirect to order page after action
-                            window.location.href = '/orders';
                         });
                 // Email toggle logic
                 function toggleEmail() {

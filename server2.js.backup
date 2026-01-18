@@ -3,16 +3,14 @@
 if (process.env.NODE_ENV !== 'production') {
     require('dotenv').config();
 }
-const express = require("express");
-const bodyParser = require("body-parser");
-const puppeteer = require("puppeteer");
-const Handlebars = require("handlebars");
 const nodemailer = require('nodemailer');
+const express = require('express');
 const webpack = require('webpack');
 const bwipjs = require('bwip-js');
 const webpackConfig = require('./webpack.config.js');
 const { MongoClient } = require('mongodb');
 const ObjectID = require('mongodb').ObjectID;
+const bodyParser = require('body-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const cookieParser = require('cookie-parser');
@@ -27,31 +25,9 @@ const app = express();
 
 // IMPORTANT: Set up middleware BEFORE defining routes
 const port = process.env.PORT || 3000;
-
-// Debug middleware to log all requests
-app.use((req, res, next) => {
-    if (req.path === '/submitbill') {
-        console.log('\n>>> INCOMING REQUEST to /submitbill');
-        console.log('Method:', req.method);
-        console.log('Content-Type header:', req.headers['content-type']);
-        console.log('Content-Length:', req.headers['content-length']);
-    }
-    next();
-});
-
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Debug middleware to log parsed body
-app.use((req, res, next) => {
-    if (req.path === '/submitbill') {
-        console.log('>>> AFTER BODY PARSER');
-        console.log('req.body:', req.body);
-        console.log('req.body type:', typeof req.body);
-    }
-    next();
-});
 app.use(express.static('public'));
 app.set('views', './views');
 app.set('view engine', 'ejs');
@@ -389,195 +365,73 @@ app.post('/fetchorderitem', checkAuthenticated, (req, res) => {
     });
 });
 
-
-// Submit bill endpoint - saves new order(s) from form submission
+// ...existing code...
+// Move /fetchorderitem route after app initialization
 app.post('/submitbill', checkAuthenticated, async (req, res) => {
     try {
-        console.log('=== /submitbill RECEIVED ===');
-        console.log('req.body:', req.body);
-        console.log('============================');
-        
-        const ordersCollection = db.collection('orders');
-        const mailCollection = db.collection('mail');
-        const customerCollection = db.collection('customer');
-        const receiptCollection = db.collection('receipt');
-        
-        // Generate bill number in format: TCH-25-26/00006
-        // TCH = prefix, 25-26 = financial year, 00006 = sequence number
-        let transactionId = '';
-        try {
-            // Get next sequence number from receipt collection
-            const receipt = await receiptCollection.findOneAndUpdate(
-                { _id: 'billSequence' },
-                { $inc: { sequenceNumber: 1 } },
-                { upsert: true, returnDocument: 'after' }
-            );
-            
-            const sequenceNumber = receipt.value?.sequenceNumber || 1;
-            const paddedSequence = String(sequenceNumber).padStart(5, '0'); // 00006
-            
-            // Calculate financial year (April to March)
-            const today = new Date();
-            const currentYear = today.getFullYear();
-            const currentMonth = today.getMonth(); // 0-11, so April = 3
-            
-            let financialYearStart, financialYearEnd;
-            if (currentMonth >= 3) { // April onwards
-                financialYearStart = currentYear;
-                financialYearEnd = currentYear + 1;
-            } else { // Before April
-                financialYearStart = currentYear - 1;
-                financialYearEnd = currentYear;
+        // Promisify fetchOrderItem if not already
+        const fetchOrderItemAsync = (req) => {
+            return new Promise((resolve, reject) => {
+                fetchOrderItem(req, (err, result) => {
+                    if (err) return reject(err);
+                    resolve(result);
+                });
+            });
+        };
+        const result = await fetchOrderItemAsync(req);
+        var orderDetails = result.rows;
+        var htmlOrderTable = "";
+        var invoiceNumber = orderDetails[0].TransactionID;
+        var customerName = orderDetails[0].CustomerName;
+        var CustomerEmail = orderDetails[0].CustomerEmail;
+        var total = 0.0;
+        orderDetails.forEach((order) => {
+            total = total + order.Amount;
+            htmlOrderTable = htmlOrderTable + `<tr><td style="padding: 5px 10px 5px 0"width="80%"align="left"><p>₹${order.ItemName}</p></td><td style="padding: 5px 0"width="20%"align="left"><p>₹${order.Amount}</p></td></tr>`;
+        });
+        let transporter = nodemailer.createTransport({
+            host: process.env.ehost,
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.euser,
+                pass: process.env.pass
             }
-            
-            const fyStart = String(financialYearStart).slice(-2);
-            const fyEnd = String(financialYearEnd).slice(-2);
-            const financialYear = `${fyStart}-${fyEnd}`;
-            
-            transactionId = `TCH-${financialYear}/${paddedSequence}`;
-        } catch (seqErr) {
-            console.error('Error generating sequence number:', seqErr);
-            // Fallback to timestamp if sequence fails
-            transactionId = `TCH-${Date.now()}`;
-        }
-        
-        const customerName = req.body.CustomerName || '';
-        const customerPhone = req.body.PhoneNumber || '';
-        const customerEmail = req.body.Email || '';
-        const customerAddress = req.body.Address || '';
-        const customerPincode = req.body.Pincode || '';
-        const billDate = req.body.todayDate || new Date().toISOString().split('T')[0];
-        const sendEmail = req.body.sendEmail === 'yes' || req.body.sendEmail === true;
-        const onlinePayment = req.body.onlinePayment === 'yes' || req.body.onlinePayment === true || false;
-        const products = [];
-        let totalAmount = 0;
-        let htmlOrderTable = "";
-        
-        // Get current date/time for transaction details
-        const now = new Date();
-        const transactionDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
-        const transactionTime = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-        const tDay = now.getDate();
-        const tMonth = now.getMonth() + 1;
-        const tYear = now.getFullYear();
-        const userRole = getUserRole(req);
-        
-        // Extract products from form data (dynamic indexed fields)
-        for (let i = 0; i < 100; i++) {
-            const itemName = req.body[`product${i}`];
-            if (!itemName) continue;
-            
-            const itemId = req.body[`id${i}`] || '';
-            const quantity = parseFloat(req.body[`unit${i}`]) || 0;
-            const price = parseFloat(req.body[`price${i}`]) || 0;
-            const amount = parseFloat(req.body[`amount${i}`]) || 0;
-            const discount = parseFloat(req.body[`discount${i}`]) || 0;
-            const gst = parseFloat(req.body[`gst${i}`]) || 0;
-            
-            products.push({
-                UserBy: userRole,
-                TransactionID: transactionId,
-                ItemID: itemId,
-                ItemName: itemName,
-                Category: req.body[`category${i}`] || '',
-                Brand: req.body[`brand${i}`] || '',
-                Size: req.body[`hsb${i}`] || '',
-                Quantity: quantity,
-                Price: price,
-                Amount: amount,
-                Discount: discount,
-                GST: gst,
-                OnlinePayment: onlinePayment,
-                BillDate: billDate,
-                TransactionDate: transactionDate,
-                TransactionTime: transactionTime,
-                TDay: tDay,
-                TMonth: tMonth,
-                TYear: tYear,
-                CustomerName: customerName,
-                CustomerPhone: customerPhone,
-                CustomerEmail: customerEmail,
-                CustomerAddress: customerAddress,
-                CreatedAt: new Date()
-            });
-            
-            totalAmount += amount;
-            htmlOrderTable += `<tr><td style="padding: 5px 10px 5px 0" width="80%" align="left"><p>${itemName} (Qty: ${quantity})</p></td><td style="padding: 5px 0" width="20%" align="left"><p>₹${amount}</p></td></tr>`;
-        }
-        
-        if (products.length === 0) {
-            return res.status(400).json({error: 'No products added to bill'});
-        }
-        
-        // Save all products to database
-        await ordersCollection.insertMany(products);
-        
-        // Also save/update customer information
-        if (customerPhone) {
-            const customerDoc = {
-                PhoneNumber: customerPhone,
-                CustomerName: customerName,
-                Email: customerEmail,
-                Address: customerAddress,
-                Pincode: customerPincode,
-                UpdatedAt: new Date()
-            };
-            
-            // Upsert customer - update if exists, create if not
-            await customerCollection.updateOne(
-                { PhoneNumber: customerPhone },
-                { $set: customerDoc },
-                { upsert: true }
-            );
-        }
-        
-        // Send email if enabled
-        if (sendEmail && customerEmail) {
-            let transporter = nodemailer.createTransport({
-                host: process.env.ehost,
-                port: 587,
-                secure: false,
-                auth: {
-                    user: process.env.euser,
-                    pass: process.env.pass
-                }
-            });
-            
-            let info = await transporter.sendMail({
-                from: 'keyurgajjar91@gmail.com',
-                to: customerEmail,
-                subject: `Thank you for shopping at Phoner #Invoice: ${transactionId}`,
-                text: `Hi, ${customerName}`,
-                html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Invoice</title></head><body style="margin:0;padding:0;font-family:Arial,sans-serif;color:#333;"><div style="max-width:700px;margin:20px auto;padding:20px;border:1px solid #e0e0e0;border-radius:8px;"><div style="text-align:center;margin-bottom:20px;"><h1 style="margin:0;font-size:28px;">The Phoner Hub</h1><p style="margin:5px 0;font-size:14px;color:#555;">Mobile Accessories &amp; More</p></div><hr style="border:none;border-top:1px solid #e0e0e0;margin:15px 0;"><h2 style="margin:0 0 10px 0;font-size:20px;">Invoice</h2><p style="margin:0 0 5px 0;font-size:14px;"><strong>Customer:</strong> ${customerName}</p><p style="margin:0 0 15px 0;font-size:14px;"><strong>Invoice No:</strong> ${transactionId}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Item</th><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Amount</th></tr></thead><tbody>${htmlOrderTable}</tbody></table><h3 style="text-align:right;margin-top:15px;font-size:18px;">Total: ₹${totalAmount}</h3><p style="margin-top:20px;font-size:13px;color:#555;">Thank you for shopping with us!</p><p style="margin:5px 0 0 0;font-size:12px;color:#777;"><strong>The Phoner Hub</strong><br>Shop No: G-101, B.T. Mall, Navjivan Mall Compound, Kalol-382721<br>Dist-Gandhinagar | Contact: 9714621020</p></div></body></html>`
-            });
-            
-            const newMail = {
-                TransactionID: transactionId,
-                Total: totalAmount,
-                From: 'keyurgajjar91@gmail.com',
-                To: customerEmail,
-                MessageId: info.messageId,
-                Subject: `Thank you for shopping at Phoner #Invoice: ${transactionId}`,
-                SentOn: new Date()
-            };
-            
-            await mailCollection.insertOne(newMail);
-        }
-        
+        });
+        let info = await transporter.sendMail({
+            from: 'keyurgajjar91@gmail.com',
+            to: CustomerEmail,
+            subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            text: `Hi, ${customerName}`,
+            html: `<!DOCTYPE html PUBLIC'-//W3C//DTD XHTML 1.0 Transitional//EN''http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html xmlns='http://www.w3.org/1999/xhtml'xmlns:o='urn:schemas-microsoft-com:office:office'><head><meta charset='UTF-8'><meta content='width=device-width, initial-scale=1'name='viewport'><meta name='x-apple-disable-message-reformatting'><meta http-equiv='X-UA-Compatible'content='IE=edge'><meta content='telephone=no'name='format-detection'><title></title><!--[if(mso 16)]><style type='text/css'>a{text-decoration:none;}</style><![endif]--><!--[if gte mso 9]><style>sup{font-size:100%!important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG></o:AllowPNG><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body><div class='es-wrapper-color'><!--[if gte mso 9]><v:background xmlns:v='urn:schemas-microsoft-com:vml'fill='t'><v:fill type='tile'color='#eeeeee'></v:fill></v:background><![endif]--><table class='es-wrapper'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-email-paddings'valign='top'><table cellpadding='0'cellspacing='0'class='es-content esd-header-popover'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7954'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p15t es-p15b es-p10r es-p10l'align='left'><!--[if mso]><table width='580'cellpadding='0'cellspacing='0'><tr><td width='282'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='esd-container-frame'width='282'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='es-infoblock esd-block-text es-m-txt-c'align='left'><p style='font-family: arial, helvetica\ neue, helvetica, sans-serif;'><br></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='170'valign='top'><![endif]--><table cellspacing='0'cellpadding='0'align='right'><tbody><tr class='es-hidden'><td class='es-m-p20b esd-container-frame'esd-custom-block-id='7704'width='170'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-spacer es-p5b'align='center'style='font-size:0'><table width='100%'height='100%'cellspacing='0'cellpadding='0'border='0'><tbody><tr><td style='border-bottom: 1px solid #044767; background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%; height: 1px; width: 100%; margin: 0px;'></td></tr></tbody></table></td></tr><tr><td><table cellspacing='0'cellpadding='0'align='right'><tbody><tr><td align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text'align='right'><p>The Cycle Hub</p></td></tr></tbody></table></td><td class='esd-block-image es-p10l'valign='top'align='left'style='font-size:0'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p40t es-p35b es-p35r es-p35l'esd-custom-block-id='7685'style='background-color: #f7f7f7;'bgcolor='#f7f7f7'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-image es-p20t es-p25b es-p35r es-p35l'align='center'style='font-size:0'></td></tr><tr><td class='esd-block-text es-p15b'align='center'><h2 style='color: #333333; font-family: 'open sans', 'helvetica neue', helvetica, arial, sans-serif;'>Thanks for your purchase</h2></td></tr><tr><td class='esd-block-text es-m-txt-l es-p20t'align='left'><h3 style='font-size: 18px;'>Hello ${customerName},</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='left'><p style='font-size: 16px; color: #777777;'>Please find the invoice below for your purchase</p></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p40t es-p40b es-p35r es-p35l'esd-custom-block-id='7685'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p20t'align='center'><h3 style='color: #333333;'>INVOICE</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='center'><p style='font-size: 16px; color: #777777;'>INVOICE NUMBER: ${invoiceNumber}</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table cellpadding='0'cellspacing='0'class='es-content'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p20t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'bgcolor='#eeeeee'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>Order Confirmation#</h4></td><td width='20%'><h4>${invoiceNumber}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody>${htmlOrderTable}</tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p10t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table style='border-top: 3px solid #eeeeee; border-bottom: 3px solid #eeeeee;'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p15t es-p15b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>TOTAL</h4></td><td width='20%'><h4>${total}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7797'align='center'><table class='es-content-body'style='background-color: #1b9ba3;'width='600'cellspacing='0'cellpadding='0'bgcolor='#1b9ba3'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td width='530'align='left'class='esd-container-frame'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-footer'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7684'align='center'><table class='es-footer-body'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p35t es-p40b es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p35b'align='center'><p><b>Keyur Gajjar</b></p></td></tr><tr><td esdev-links-color='#777777'align='left'class='esd-block-text es-m-txt-c es-p5b'><p style='color: #777777;'>Thanks your shooping and waiting for your next visit.</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='esd-footer-popover es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p30t es-p30b es-p20r es-p20l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='560'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div></body></html>`,
+        });
+        const mailCollection = db.collection('mail');
+        const newMail = {
+            Total: total,
+            From: 'keyurgajjar91@gmail.com',
+            To: CustomerEmail,
+            MessageId: info.messageId,
+            Subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            SentOn: new Date()
+        };
+        await mailCollection.insertOne(newMail);
         res.status(200).json({
-            success: true,
-            message: 'Bill submitted successfully',
-            transactionId: transactionId,
-            total: totalAmount
+            error: null,
+            message: `Message sent: ${info.messageId} to mail: ${CustomerEmail}`
         });
     } catch (err) {
-        console.error('Error in /submitbill:', err);
+        console.error('Error in /sendmail:', err);
         res.status(500).json({
-            error: 'Error Submitting Bill: ' + err.message
+            error: 'Error Sending mail: ' + err.message
         });
     }
 });
+// ...existing code...
 app.get('/edititem', checkAuthenticated, (req, res) => {
+    // res.render('editOrder.ejs', {
+    //     user: getUserRole(req),
+    //     orderData: getOderData(req.query.edititemid)
+    // })
     const ordersCollection = db.collection('orders');
     const customerCollection = db.collection("customer");
 
@@ -587,33 +441,26 @@ app.get('/edititem', checkAuthenticated, (req, res) => {
     ordersCollection.findOne({ _id: objectId2 }, (err1, item) => {
         if (err1 || !item) {
             console.error('Error editing value:', err1);
-            return res.status(404).send('Order item not found');
+            return;
         }
         // Now, find all items with the same TransactionID
         ordersCollection.find({ TransactionID: item.TransactionID }).toArray((err2, items) => {
             if (err2 || !items || items.length === 0) {
                 console.error('Error fetching order items:', err2);
-                return res.status(404).send('Order items not found');
+                return;
             }
             customerCollection.find({ PhoneNumber: items[0].CustomerPhone }).toArray((err3, customers) => {
-                // Use customer data from order if not found in customer collection
-                const customerData = customers && customers.length > 0 ? customers[0] : {
-                    _id: new ObjectID(),
-                    PhoneNumber: items[0].CustomerPhone,
-                    CustomerName: items[0].CustomerName,
-                    Email: items[0].CustomerEmail,
-                    Address: items[0].CustomerAddress,
-                    Pincode: ''
-                };
-                
                 res.render("editOrder.ejs", {
                     user: getUserRole(req),
                     orderItems: items,
-                    customerData: customerData
+                    customerData: customers[0]
                 });
             });
         });
     });
+    // ordersCollection.find({
+    //     _id: objectId2
+    // }, (err, result) => {
        
 
     // });
@@ -636,10 +483,6 @@ app.post('/edititem', checkAuthenticated, (req, res) => {
         // Update all items
         let updatePromises = [];
         for (let i = 0; i < itemIDs.length; i++) {
-                const size = parseInt(sizes[i]) || 0;
-                const price = parseFloat(prices[i]) || 0;
-                const amount = (price * size) || 0;
-                
                 updatePromises.push(
                         ordersCollection.updateOne(
                                 { _id: new ObjectID(_ids[i]) },
@@ -650,9 +493,9 @@ app.post('/edititem', checkAuthenticated, (req, res) => {
                                                 Category: categories[i],
                                                 Brand: brands[i],
                                                 BillDate: billDates[i],
-                                                Size: size,
-                                                Price: price,
-                                                Amount: amount
+                                                Size: parseInt(sizes[i]),
+                                                Price: parseFloat(prices[i]),
+                                                Amount: parseFloat(prices[i]) * parseFloat(sizes[i])
                                         }
                                 }
                         )
@@ -869,7 +712,67 @@ app.get('/export/csv', async (req, res) => {
     res.send(csvString);
 });
 
-
+app.post('/submitbill', checkAuthenticated, async (req, res) => {
+    try {
+        // Promisify fetchOrderItem if not already
+        const fetchOrderItemAsync = (req) => {
+            return new Promise((resolve, reject) => {
+                fetchOrderItem(req, (err, result) => {
+                    if (err) return reject(err);
+                    resolve(result);
+                });
+            });
+        };
+        const result = await fetchOrderItemAsync(req);
+        var orderDetails = result.rows;
+        var htmlOrderTable = "";
+        var invoiceNumber = orderDetails[0].TransactionID;
+        var customerName = orderDetails[0].CustomerName;
+        var CustomerEmail = orderDetails[0].CustomerEmail;
+        var total = 0.0;
+        orderDetails.forEach((order) => {
+            total = total + order.Amount;
+            htmlOrderTable = htmlOrderTable + `<tr><td style="padding: 5px 10px 5px 0"width="80%"align="left"><p>₹${order.ItemName}</p></td><td style="padding: 5px 0"width="20%"align="left"><p>₹${order.Amount}</p></td></tr>`;
+        });
+        let transporter = nodemailer.createTransport({
+            host: process.env.ehost,
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.euser,
+                pass: process.env.pass
+            }
+        });
+        let info = await transporter.sendMail({
+            from: 'keyurgajjar91@gmail.com',
+            to: CustomerEmail,
+            subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            text: `Hi, ${customerName}`,
+            html: `<!DOCTYPE html PUBLIC'-//W3C//DTD XHTML 1.0 Transitional//EN''http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html xmlns='http://www.w3.org/1999/xhtml'xmlns:o='urn:schemas-microsoft-com:office:office'><head><meta charset='UTF-8'><meta content='width=device-width, initial-scale=1'name='viewport'><meta name='x-apple-disable-message-reformatting'><meta http-equiv='X-UA-Compatible'content='IE=edge'><meta content='telephone=no'name='format-detection'><title></title><!--[if(mso 16)]><style type='text/css'>a{text-decoration:none;}</style><![endif]--><!--[if gte mso 9]><style>sup{font-size:100%!important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG></o:AllowPNG><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body><div class='es-wrapper-color'><!--[if gte mso 9]><v:background xmlns:v='urn:schemas-microsoft-com:vml'fill='t'><v:fill type='tile'color='#eeeeee'></v:fill></v:background><![endif]--><table class='es-wrapper'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-email-paddings'valign='top'><table cellpadding='0'cellspacing='0'class='es-content esd-header-popover'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7954'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p15t es-p15b es-p10r es-p10l'align='left'><!--[if mso]><table width='580'cellpadding='0'cellspacing='0'><tr><td width='282'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='esd-container-frame'width='282'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='es-infoblock esd-block-text es-m-txt-c'align='left'><p style='font-family: arial, helvetica\ neue, helvetica, sans-serif;'><br></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='170'valign='top'><![endif]--><table cellspacing='0'cellpadding='0'align='right'><tbody><tr class='es-hidden'><td class='es-m-p20b esd-container-frame'esd-custom-block-id='7704'width='170'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-spacer es-p5b'align='center'style='font-size:0'><table width='100%'height='100%'cellspacing='0'cellpadding='0'border='0'><tbody><tr><td style='border-bottom: 1px solid #044767; background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%; height: 1px; width: 100%; margin: 0px;'></td></tr></tbody></table></td></tr><tr><td><table cellspacing='0'cellpadding='0'align='right'><tbody><tr><td align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text'align='right'><p>The Cycle Hub</p></td></tr></tbody></table></td><td class='esd-block-image es-p10l'valign='top'align='left'style='font-size:0'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div></body></html>`,
+        });
+        const mailCollection = db.collection('mail');
+        const newMail = {
+            Total: total,
+            From: 'keyurgajjar91@gmail.com',
+            To: CustomerEmail,
+            MessageId: info.messageId,
+            Subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
+            SentOn: new Date()
+        };
+        await mailCollection.insertOne(newMail);
+        res.status(200).json({
+            error: null,
+            message: `Message sent: ${info.messageId} to mail: ${CustomerEmail}`
+        });
+    } catch (err) {
+        console.error('Error in /sendmail:', err);
+        res.status(500).json({
+            error: 'Error Sending mail: ' + err.message
+        });
+    }
+});
+// Remove global filter_type usage. Instead, declare filter_type inside the route handler where req is available.
+// Move filter_type logic inside the route handler where req is available
 app.post('/stock_filter_query', checkAuthenticated, async (req, res) => {
     const stockCollection = db.collection('stock');
     const filter_type = req.body && req.body.filter_type ? req.body.filter_type : (req.query && req.query.filter_type ? req.query.filter_type : undefined);

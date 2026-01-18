@@ -104,7 +104,11 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Price</label>
-                    <input type="number" step="0.01" name="price[]" class="form-input" value="<%= item.Price %>" required>
+                    <input type="number" step="0.01" name="price[]" class="form-input price-input" value="<%= item.Price %>" required onchange="calculateAmount(this)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Amount</label>
+                    <input type="number" step="0.01" name="amount[]" class="form-input amount-input" value="<%= item.Amount %>" readonly>
                 </div>
             </div>
             <% }); %>
@@ -130,4 +134,30 @@
     </div>
 </main>
 
-<%- include('footer') %>
+<script>
+function calculateAmount(priceInput) {
+    // Find the parent form-grid div
+    const formGrid = priceInput.closest('.form-grid');
+    
+    // Find size and price inputs in this grid
+    const sizeInput = formGrid.querySelector('input[name="size[]"]');
+    const priceInputVal = priceInput.querySelector ? formGrid.querySelector('input[name="price[]"]') : priceInput;
+    const amountInput = formGrid.querySelector('input[name="amount[]"]');
+    
+    if (sizeInput && priceInputVal && amountInput) {
+        const size = parseFloat(sizeInput.value) || 0;
+        const price = parseFloat(priceInputVal.value) || 0;
+        const amount = size * price;
+        
+        amountInput.value = isNaN(amount) ? '0.00' : amount.toFixed(2);
+    }
+}
+
+// Run calculation on page load for all items
+document.addEventListener('DOMContentLoaded', function() {
+    const priceInputs = document.querySelectorAll('input[name="price[]"]');
+    priceInputs.forEach(priceInput => {
+        calculateAmount(priceInput);
+    });
+});
+</script>
