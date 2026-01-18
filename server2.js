@@ -5,8 +5,6 @@ if (process.env.NODE_ENV !== 'production') {
 }
 const express = require("express");
 const bodyParser = require("body-parser");
-const puppeteer = require("puppeteer");
-const Handlebars = require("handlebars");
 const nodemailer = require('nodemailer');
 const webpack = require('webpack');
 const bwipjs = require('bwip-js');
@@ -171,6 +169,16 @@ async function connectToMongo() {
 //    });
 //     //res.send("Please pay your oustanding to re-enable your service, please contact your service provider for bill and payment related queries.");
 // });
+// Health check endpoint (no authentication required)
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        database: db ? 'connected' : 'disconnected'
+    });
+});
+
 app.get('/login', (req, res) => {
     let data = {
         messages: {
