@@ -479,22 +479,33 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
         const products = [];
         let totalAmount = 0;
         let htmlOrderTable = "";
-        
+
+        // Prepare to check and insert new categories/brands
+        const categoryCollection = db.collection('categories');
+        const brandCollection = db.collection('brands');
+        const newCategories = new Set();
+        const newBrands = new Set();
+
         for (let i = 0; i < 100; i++) {
             const itemName = req.body[`product${i}`];
             if (!itemName) continue;
-            
+
+            const category = req.body[`category${i}`] || '';
+            const brand = req.body[`brand${i}`] || '';
+            if (category) newCategories.add(category.trim());
+            if (brand) newBrands.add(brand.trim());
+
             const quantity = parseFloat(req.body[`unit${i}`]) || 0;
             const price = parseFloat(req.body[`price${i}`]) || 0;
             const amount = parseFloat(req.body[`amount${i}`]) || 0;
-            
+
             products.push({
                 UserBy: userRole,
                 TransactionID: transactionId,
                 ItemID: req.body[`id${i}`] || '',
                 ItemName: itemName,
-                Category: req.body[`category${i}`] || '',
-                Brand: req.body[`brand${i}`] || '',
+                Category: category,
+                Brand: brand,
                 Size: req.body[`hsb${i}`] || '',
                 Quantity: quantity,
                 Price: price,
@@ -514,9 +525,27 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
                 CustomerAddress: customerAddress,
                 CreatedAt: now
             });
-            
+
             totalAmount += amount;
             htmlOrderTable += `<tr><td style="padding: 5px 10px 5px 0" width="80%" align="left"><p>${itemName} (Qty: ${quantity})</p></td><td style="padding: 5px 0" width="20%" align="left"><p>₹${amount}</p></td></tr>`;
+        }
+
+        // Check and insert new categories/brands if not present
+        if (newCategories.size > 0) {
+            const existingCategories = await categoryCollection.find({ Category: { $in: Array.from(newCategories) } }).toArray();
+            const existingCategoryNames = new Set(existingCategories.map(c => c.Category));
+            const categoriesToInsert = Array.from(newCategories).filter(c => !existingCategoryNames.has(c));
+            if (categoriesToInsert.length > 0) {
+                await categoryCollection.insertMany(categoriesToInsert.map(c => ({ Category: c })));
+            }
+        }
+        if (newBrands.size > 0) {
+            const existingBrands = await brandCollection.find({ Brand: { $in: Array.from(newBrands) } }).toArray();
+            const existingBrandNames = new Set(existingBrands.map(b => b.Brand));
+            const brandsToInsert = Array.from(newBrands).filter(b => !existingBrandNames.has(b));
+            if (brandsToInsert.length > 0) {
+                await brandCollection.insertMany(brandsToInsert.map(b => ({ Brand: b })));
+            }
         }
         
         if (products.length === 0) {
