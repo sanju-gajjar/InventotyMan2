@@ -381,6 +381,22 @@ app.post('/fetchitem', checkAuthenticated, (req, res) => {
         res.json(result);
     });
 })
+// Delete order by _id
+app.post('/deleteorder', checkAuthenticated, async (req, res) => {
+    try {
+        const orderId = req.body.orderId;
+        if (!orderId) {
+            return res.status(400).send('Order ID required');
+        }
+        const ordersCollection = db.collection('orders');
+        const ObjectID = require('mongodb').ObjectID;
+        await ordersCollection.deleteMany({ _id: new ObjectID(orderId) });
+        res.redirect('/orders');
+    } catch (err) {
+        console.error('Error deleting order:', err);
+        res.status(500).send('Failed to delete order');
+    }
+});
 app.get('/billing', checkAuthenticated, (req, res) => {
     getBillPage(req, (err, result) => {
         res.render('bill.ejs', result)
@@ -410,7 +426,9 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
         const receiptCollection = db.collection('receipt');
         
         // OPTIMIZATION 1: Generate transaction ID faster (single DB call)
-        const now = new Date();
+        // Get IST time (UTC+5:30)
+        const nowUTC = new Date();
+        const now = new Date(nowUTC.getTime() + (5.5 * 60 * 60 * 1000));
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
         
@@ -442,13 +460,16 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
         const customerEmail = req.body.Email || '';
         const customerAddress = req.body.Address || '';
         const customerPincode = req.body.Pincode || '';
+        // Format date as YYYY-MM-DD in IST
         const billDate = req.body.todayDate || now.toISOString().split('T')[0];
         const sendEmail = req.body.sendEmail === 'yes' || req.body.sendEmail === true;
         const onlinePayment = req.body.onlinePayment === 'yes' || req.body.onlinePayment === true || false;
         
         // Pre-calculate transaction details
         const transactionDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
-        const transactionTime = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+        // Pad hours/minutes/seconds for better readability
+        const pad = n => n.toString().padStart(2, '0');
+        const transactionTime = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
         const tDay = now.getDate();
         const tMonth = now.getMonth() + 1;
         const tYear = now.getFullYear();
