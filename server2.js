@@ -398,23 +398,24 @@ app.post('/fetchorderitem', checkAuthenticated, (req, res) => {
 });
 
 
-// Submit bill endpoint - saves new order(s) from form submission
+// Submit bill endpoint - saves new order(s) from form submission - OPTIMIZED
 app.post('/submitbill', checkAuthenticated, async (req, res) => {
+    const startTime = Date.now();
     try {
         console.log('=== /submitbill RECEIVED ===');
-        console.log('req.body:', req.body);
-        console.log('============================');
         
         const ordersCollection = db.collection('orders');
         const mailCollection = db.collection('mail');
         const customerCollection = db.collection('customer');
         const receiptCollection = db.collection('receipt');
         
-        // Generate bill number in format: TCH-25-26/00006
-        // TCH = prefix, 25-26 = financial year, 00006 = sequence number
+        // OPTIMIZATION 1: Generate transaction ID faster (single DB call)
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        
         let transactionId = '';
         try {
-            // Get next sequence number from receipt collection
             const receipt = await receiptCollection.findOneAndUpdate(
                 { _id: 'billSequence' },
                 { $inc: { sequenceNumber: 1 } },
@@ -422,47 +423,30 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
             );
             
             const sequenceNumber = receipt.value?.sequenceNumber || 1;
-            const paddedSequence = String(sequenceNumber).padStart(5, '0'); // 00006
+            const paddedSequence = String(sequenceNumber).padStart(5, '0');
             
-            // Calculate financial year (April to March)
-            const today = new Date();
-            const currentYear = today.getFullYear();
-            const currentMonth = today.getMonth(); // 0-11, so April = 3
-            
-            let financialYearStart, financialYearEnd;
-            if (currentMonth >= 3) { // April onwards
-                financialYearStart = currentYear;
-                financialYearEnd = currentYear + 1;
-            } else { // Before April
-                financialYearStart = currentYear - 1;
-                financialYearEnd = currentYear;
-            }
-            
-            const fyStart = String(financialYearStart).slice(-2);
-            const fyEnd = String(financialYearEnd).slice(-2);
-            const financialYear = `${fyStart}-${fyEnd}`;
+            // Calculate financial year
+            const financialYearStart = currentMonth >= 3 ? currentYear : currentYear - 1;
+            const financialYearEnd = financialYearStart + 1;
+            const financialYear = `${String(financialYearStart).slice(-2)}-${String(financialYearEnd).slice(-2)}`;
             
             transactionId = `TCH-${financialYear}/${paddedSequence}`;
         } catch (seqErr) {
             console.error('Error generating sequence number:', seqErr);
-            // Fallback to timestamp if sequence fails
             transactionId = `TCH-${Date.now()}`;
         }
         
+        // Extract customer data
         const customerName = req.body.CustomerName || '';
         const customerPhone = req.body.PhoneNumber || '';
         const customerEmail = req.body.Email || '';
         const customerAddress = req.body.Address || '';
         const customerPincode = req.body.Pincode || '';
-        const billDate = req.body.todayDate || new Date().toISOString().split('T')[0];
+        const billDate = req.body.todayDate || now.toISOString().split('T')[0];
         const sendEmail = req.body.sendEmail === 'yes' || req.body.sendEmail === true;
         const onlinePayment = req.body.onlinePayment === 'yes' || req.body.onlinePayment === true || false;
-        const products = [];
-        let totalAmount = 0;
-        let htmlOrderTable = "";
         
-        // Get current date/time for transaction details
-        const now = new Date();
+        // Pre-calculate transaction details
         const transactionDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
         const transactionTime = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
         const tDay = now.getDate();
@@ -470,22 +454,23 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
         const tYear = now.getFullYear();
         const userRole = getUserRole(req);
         
-        // Extract products from form data (dynamic indexed fields)
+        // OPTIMIZATION 2: Parse products more efficiently
+        const products = [];
+        let totalAmount = 0;
+        let htmlOrderTable = "";
+        
         for (let i = 0; i < 100; i++) {
             const itemName = req.body[`product${i}`];
             if (!itemName) continue;
             
-            const itemId = req.body[`id${i}`] || '';
             const quantity = parseFloat(req.body[`unit${i}`]) || 0;
             const price = parseFloat(req.body[`price${i}`]) || 0;
             const amount = parseFloat(req.body[`amount${i}`]) || 0;
-            const discount = parseFloat(req.body[`discount${i}`]) || 0;
-            const gst = parseFloat(req.body[`gst${i}`]) || 0;
             
             products.push({
                 UserBy: userRole,
                 TransactionID: transactionId,
-                ItemID: itemId,
+                ItemID: req.body[`id${i}`] || '',
                 ItemName: itemName,
                 Category: req.body[`category${i}`] || '',
                 Brand: req.body[`brand${i}`] || '',
@@ -493,8 +478,8 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
                 Quantity: quantity,
                 Price: price,
                 Amount: amount,
-                Discount: discount,
-                GST: gst,
+                Discount: parseFloat(req.body[`discount${i}`]) || 0,
+                GST: parseFloat(req.body[`gst${i}`]) || 0,
                 OnlinePayment: onlinePayment,
                 BillDate: billDate,
                 TransactionDate: transactionDate,
@@ -506,7 +491,7 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
                 CustomerPhone: customerPhone,
                 CustomerEmail: customerEmail,
                 CustomerAddress: customerAddress,
-                CreatedAt: new Date()
+                CreatedAt: now
             });
             
             totalAmount += amount;
@@ -517,60 +502,37 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
             return res.status(400).json({error: 'No products added to bill'});
         }
         
-        // Save all products to database
-        await ordersCollection.insertMany(products);
+        // OPTIMIZATION 3: Parallel database operations
+        const dbOperations = [
+            ordersCollection.insertMany(products)
+        ];
         
-        // Also save/update customer information
+        // Add customer upsert if phone exists
         if (customerPhone) {
-            const customerDoc = {
-                PhoneNumber: customerPhone,
-                CustomerName: customerName,
-                Email: customerEmail,
-                Address: customerAddress,
-                Pincode: customerPincode,
-                UpdatedAt: new Date()
-            };
-            
-            // Upsert customer - update if exists, create if not
-            await customerCollection.updateOne(
-                { PhoneNumber: customerPhone },
-                { $set: customerDoc },
-                { upsert: true }
+            dbOperations.push(
+                customerCollection.updateOne(
+                    { PhoneNumber: customerPhone },
+                    { 
+                        $set: {
+                            PhoneNumber: customerPhone,
+                            CustomerName: customerName,
+                            Email: customerEmail,
+                            Address: customerAddress,
+                            Pincode: customerPincode,
+                            UpdatedAt: now
+                        }
+                    },
+                    { upsert: true }
+                )
             );
         }
         
-        // Send email if enabled
-        if (sendEmail && customerEmail) {
-            let transporter = nodemailer.createTransport({
-                host: process.env.ehost,
-                port: 587,
-                secure: false,
-                auth: {
-                    user: process.env.euser,
-                    pass: process.env.pass
-                }
-            });
-            
-            let info = await transporter.sendMail({
-                from: 'keyurgajjar91@gmail.com',
-                to: customerEmail,
-                subject: `Thank you for shopping at Phoner #Invoice: ${transactionId}`,
-                text: `Hi, ${customerName}`,
-                html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Invoice</title></head><body style="margin:0;padding:0;font-family:Arial,sans-serif;color:#333;"><div style="max-width:700px;margin:20px auto;padding:20px;border:1px solid #e0e0e0;border-radius:8px;"><div style="text-align:center;margin-bottom:20px;"><h1 style="margin:0;font-size:28px;">The Phoner Hub</h1><p style="margin:5px 0;font-size:14px;color:#555;">Mobile Accessories &amp; More</p></div><hr style="border:none;border-top:1px solid #e0e0e0;margin:15px 0;"><h2 style="margin:0 0 10px 0;font-size:20px;">Invoice</h2><p style="margin:0 0 5px 0;font-size:14px;"><strong>Customer:</strong> ${customerName}</p><p style="margin:0 0 15px 0;font-size:14px;"><strong>Invoice No:</strong> ${transactionId}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Item</th><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Amount</th></tr></thead><tbody>${htmlOrderTable}</tbody></table><h3 style="text-align:right;margin-top:15px;font-size:18px;">Total: ₹${totalAmount}</h3><p style="margin-top:20px;font-size:13px;color:#555;">Thank you for shopping with us!</p><p style="margin:5px 0 0 0;font-size:12px;color:#777;"><strong>The Phoner Hub</strong><br>Shop No: G-101, B.T. Mall, Navjivan Mall Compound, Kalol-382721<br>Dist-Gandhinagar | Contact: 9714621020</p></div></body></html>`
-            });
-            
-            const newMail = {
-                TransactionID: transactionId,
-                Total: totalAmount,
-                From: 'keyurgajjar91@gmail.com',
-                To: customerEmail,
-                MessageId: info.messageId,
-                Subject: `Thank you for shopping at Phoner #Invoice: ${transactionId}`,
-                SentOn: new Date()
-            };
-            
-            await mailCollection.insertOne(newMail);
-        }
+        // Execute all database operations in parallel
+        await Promise.all(dbOperations);
+        
+        // OPTIMIZATION 4: Send response immediately, handle email asynchronously
+        const responseTime = Date.now() - startTime;
+        console.log(`Bill created in ${responseTime}ms`);
         
         res.status(200).json({
             success: true,
@@ -578,6 +540,47 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
             transactionId: transactionId,
             total: totalAmount
         });
+        
+        // OPTIMIZATION 5: Send email in background (non-blocking)
+        if (sendEmail && customerEmail) {
+            setImmediate(async () => {
+                try {
+                    let transporter = nodemailer.createTransport({
+                        host: process.env.ehost,
+                        port: 587,
+                        secure: false,
+                        auth: {
+                            user: process.env.euser,
+                            pass: process.env.pass
+                        }
+                    });
+                    
+                    let info = await transporter.sendMail({
+                        from: 'keyurgajjar91@gmail.com',
+                        to: customerEmail,
+                        subject: `Thank you for shopping at Phoner #Invoice: ${transactionId}`,
+                        text: `Hi, ${customerName}`,
+                        html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Invoice</title></head><body style="margin:0;padding:0;font-family:Arial,sans-serif;color:#333;"><div style="max-width:700px;margin:20px auto;padding:20px;border:1px solid #e0e0e0;border-radius:8px;"><div style="text-align:center;margin-bottom:20px;"><h1 style="margin:0;font-size:28px;">The Phoner Hub</h1><p style="margin:5px 0;font-size:14px;color:#555;">Mobile Accessories &amp; More</p></div><hr style="border:none;border-top:1px solid #e0e0e0;margin:15px 0;"><h2 style="margin:0 0 10px 0;font-size:20px;">Invoice</h2><p style="margin:0 0 5px 0;font-size:14px;"><strong>Customer:</strong> ${customerName}</p><p style="margin:0 0 15px 0;font-size:14px;"><strong>Invoice No:</strong> ${transactionId}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Item</th><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Amount</th></tr></thead><tbody>${htmlOrderTable}</tbody></table><h3 style="text-align:right;margin-top:15px;font-size:18px;">Total: ₹${totalAmount}</h3><p style="margin-top:20px;font-size:13px;color:#555;">Thank you for shopping with us!</p><p style="margin:5px 0 0 0;font-size:12px;color:#777;"><strong>The Phoner Hub</strong><br>Shop No: G-101, B.T. Mall, Navjivan Mall Compound, Kalol-382721<br>Dist-Gandhinagar | Contact: 9714621020</p></div></body></html>`
+                    });
+                    
+                    await mailCollection.insertOne({
+                        TransactionID: transactionId,
+                        Total: totalAmount,
+                        From: 'keyurgajjar91@gmail.com',
+                        To: customerEmail,
+                        MessageId: info.messageId,
+                        Subject: `Thank you for shopping at Phoner #Invoice: ${transactionId}`,
+                        SentOn: new Date()
+                    });
+                    
+                    console.log(`Email sent successfully to ${customerEmail}`);
+                } catch (emailErr) {
+                    console.error('Background email send failed:', emailErr);
+                    // Don't throw - email failure shouldn't affect bill creation
+                }
+            });
+        }
+        
     } catch (err) {
         console.error('Error in /submitbill:', err);
         res.status(500).json({
