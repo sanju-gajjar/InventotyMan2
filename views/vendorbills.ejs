@@ -1,0 +1,378 @@
+<%- include('header', { pageTitle: 'Vendor Bills' }) %>
+
+<main class="app-main">
+    <style>
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0;
+        }
+
+        .btn-add {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-add:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--gray-500);
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .bills-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 15px;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: var(--light);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--dark);
+            border-bottom: 2px solid var(--gray-300);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .btn-view {
+            padding: 6px 16px;
+            background: var(--info);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-delete {
+            padding: 6px 16px;
+            background: var(--danger);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .empty-state i {
+            font-size: 64px;
+            color: var(--gray-300);
+            margin-bottom: 16px;
+        }
+
+        .empty-state h3 {
+            font-size: 20px;
+            color: var(--gray-500);
+            margin-bottom: 8px;
+        }
+    </style>
+
+    <div class="page-header">
+        <h1>Vendor Bills</h1>
+        <a href="/addvendorbill" class="btn-add">
+            <i class="material-icons">add</i>
+            Add Vendor Bill
+        </a>
+    </div>
+
+    <!-- Statistics -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Bills</div>
+            <div class="stat-value"><%= bills.length %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Amount</div>
+            <div class="stat-value">₹<%= bills.reduce((sum, b) => sum + (parseFloat(b.GrandTotal) || 0), 0).toFixed(2) %></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Items Purchased</div>
+            <div class="stat-value"><%= bills.reduce((sum, b) => sum + (b.Items?.length || 0), 0) %></div>
+        </div>
+    </div>
+
+    <!-- Bills List -->
+    <div class="bills-card">
+        <div class="search-box">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search by vendor name, bill number...">
+        </div>
+
+        <div class="table-responsive">
+            <% if (bills.length > 0) { %>
+            <table id="billsTable">
+                <thead>
+                    <tr>
+                        <th>Bill Number</th>
+                        <th>Vendor Name</th>
+                        <th>Vendor Phone</th>
+                        <th>Bill Date</th>
+                        <th>Items</th>
+                        <th>Total Amount</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% bills.forEach(function(bill){ %>
+                    <tr>
+                        <td><strong><%= bill.BillNumber %></strong></td>
+                        <td><%= bill.VendorName %></td>
+                        <td><%= bill.VendorPhone || '-' %></td>
+                        <td><%= bill.BillDate %></td>
+                        <td><%= bill.Items?.length || 0 %> items</td>
+                        <td><strong>₹<%= parseFloat(bill.GrandTotal).toFixed(2) %></strong></td>
+                        <td>
+                            <button class="btn-view" onclick="viewBill('<%= bill._id %>')">View</button>
+                            <form action="/deletevendorbill" method="POST" style="display: inline;" onsubmit="return confirm('Delete this vendor bill?');">
+                                <input type="hidden" name="billid" value="<%= bill._id %>">
+                                <button type="submit" class="btn-delete">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+            <% } else { %>
+            <div class="empty-state">
+                <i class="material-icons">receipt_long</i>
+                <h3>No vendor bills found</h3>
+                <p>Start by adding your first vendor bill</p>
+            </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- View Bill Modal -->
+    <div class="modal" id="viewBillModal" style="display: none;">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>Vendor Bill Details</h2>
+                <button class="btn-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="billDetailsContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Search functionality
+        document.getElementById('searchInput')?.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('#billsTable tbody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+
+        function viewBill(billId) {
+            fetch(`/getvendorbill/${billId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.bill) {
+                        const bill = data.bill;
+                        let itemsHTML = '';
+                        
+                        if (bill.Items && bill.Items.length > 0) {
+                            itemsHTML = `
+                                <table style="width: 100%; margin-top: 20px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Item ID</th>
+                                            <th>Item Name</th>
+                                            <th>Category</th>
+                                            <th>Brand</th>
+                                            <th>Quantity</th>
+                                            <th>Unit Price</th>
+                                            <th>GST %</th>
+                                            <th>GST Amount</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${bill.Items.map(item => `
+                                            <tr>
+                                                <td>${item.ItemID}</td>
+                                                <td>${item.ItemName}</td>
+                                                <td>${item.Category}</td>
+                                                <td>${item.Brand}</td>
+                                                <td>${item.Quantity}</td>
+                                                <td>₹${parseFloat(item.UnitPrice).toFixed(2)}</td>
+                                                <td>${parseFloat(item.GSTPercent || 0).toFixed(2)}%</td>
+                                                <td>₹${parseFloat(item.GSTAmount || 0).toFixed(2)}</td>
+                                                <td>₹${parseFloat(item.Total).toFixed(2)}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            `;
+                        }
+
+                        document.getElementById('billDetailsContent').innerHTML = `
+                            <div style="padding: 20px;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                                    <div>
+                                        <strong>Bill Number:</strong> ${bill.BillNumber}<br>
+                                        <strong>Vendor Name:</strong> ${bill.VendorName}<br>
+                                        <strong>Vendor Phone:</strong> ${bill.VendorPhone || '-'}
+                                    </div>
+                                    <div>
+                                        <strong>Bill Date:</strong> ${bill.BillDate}<br>
+                                        <strong>Created:</strong> ${bill.CreatedDate || '-'}
+                                    </div>
+                                </div>
+                                ${itemsHTML}
+                                <div style="text-align: right; margin-top: 20px; padding-top: 20px; border-top: 2px solid #ddd;">
+                                    <h3 style="font-size: 24px; color: var(--primary);">Grand Total: ₹${parseFloat(bill.GrandTotal).toFixed(2)}</h3>
+                                </div>
+                            </div>
+                        `;
+                        document.getElementById('viewBillModal').style.display = 'flex';
+                    }
+                })
+                .catch(err => console.error('Error:', err));
+        }
+
+        function closeModal() {
+            document.getElementById('viewBillModal').style.display = 'none';
+        }
+
+        // Modal styles
+        const modalStyle = document.createElement('style');
+        modalStyle.textContent = `
+            .modal {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            }
+            .modal-content {
+                background: white;
+                border-radius: 16px;
+                max-height: 90vh;
+                overflow-y: auto;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            }
+            .modal-header {
+                padding: 20px 24px;
+                border-bottom: 2px solid var(--gray-200);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .modal-header h2 {
+                margin: 0;
+                font-size: 24px;
+            }
+            .btn-close {
+                background: none;
+                border: none;
+                font-size: 32px;
+                cursor: pointer;
+                color: var(--gray-500);
+            }
+        `;
+        document.head.appendChild(modalStyle);
+    </script>
+</main>
+
+<%- include('footer') %>

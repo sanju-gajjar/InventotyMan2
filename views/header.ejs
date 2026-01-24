@@ -510,32 +510,32 @@
                 <div class="nav-section-title">Main</div>
                 <ul class="nav-menu">
                     <li class="nav-item">
-                        <a href="/" class="nav-link" data-page="/" data-title="Dashboard">
+                        <a href="/" class="nav-link" data-page="/" data-title="Dashboard" data-tooltip="Dashboard Overview">
                             <i class="material-icons">dashboard</i>
                             <span>Dashboard</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="/billing" class="nav-link" data-page="/billing" data-title="Billing">
+                        <a href="/billing" class="nav-link" data-page="/billing" data-title="Billing" data-tooltip="Billing Information">
                             <i class="material-icons">receipt_long</i>
                             <span>Billing</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="/viewstocks" class="nav-link" data-page="/viewstocks" data-title="View Stocks">
+                        <a href="/viewstocks" class="nav-link" data-page="/viewstocks" data-title="View Stocks" data-tooltip="View Stock Details">
                             <i class="material-icons">inventory</i>
                             <span>View Stocks</span>
                         </a>
                     </li>
                     <% if (typeof user !== 'undefined' && user && user.role === 'admin') { %>
                     <li class="nav-item">
-                        <a href="/orders" class="nav-link" data-page="/orders" data-title="Orders">
+                        <a href="/orders" class="nav-link" data-page="/orders" data-title="Orders" data-tooltip="Manage Orders">
                             <i class="material-icons">shopping_cart</i>
                             <span>Orders</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="/stocks" class="nav-link" data-page="/stocks" data-title="Add Stock">
+                        <a href="/stocks" class="nav-link" data-page="/stocks" data-title="Add Stock" data-tooltip="Add New Stock">
                             <i class="material-icons">add_circle</i>
                             <span>Add Stock</span>
                         </a>
@@ -544,25 +544,46 @@
                 </ul>
             </div>
 
+            <!-- Vendor Section -->
+            <% if (typeof user !== 'undefined' && user && user.role === 'admin') { %>
+            <div class="nav-section">
+                <div class="nav-section-title">Vendor</div>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/vendorbills" class="nav-link" data-page="/vendorbills" data-title="Vendor Bills" data-tooltip="Vendor Bills">
+                            <i class="material-icons">receipt</i>
+                            <span>Vendor Bills</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/addvendorbill" class="nav-link" data-page="/addvendorbill" data-title="Add Vendor Bill" data-tooltip="Add Vendor Bill">
+                            <i class="material-icons">post_add</i>
+                            <span>Add Vendor Bill</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <% } %>
+
             <!-- Management Section -->
             <% if (typeof user !== 'undefined' && user && user.role === 'admin') { %>
             <div class="nav-section">
                 <div class="nav-section-title">Management</div>
                 <ul class="nav-menu">
                     <li class="nav-item">
-                        <a href="/brands" class="nav-link" data-page="/brands" data-title="Brands">
+                        <a href="/brands" class="nav-link" data-page="/brands" data-title="Brands" data-tooltip="Manage Brands">
                             <i class="material-icons">label</i>
                             <span>Brands</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="/categories" class="nav-link" data-page="/categories" data-title="Categories">
+                        <a href="/categories" class="nav-link" data-page="/categories" data-title="Categories" data-tooltip="Manage Categories">
                             <i class="material-icons">category</i>
                             <span>Categories</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="/viewbarcodepage" class="nav-link" data-page="/viewbarcodepage" data-title="Barcode Generator">
+                        <a href="/viewbarcodepage" class="nav-link" data-page="/viewbarcodepage" data-title="Barcode Generator" data-tooltip="Generate Barcodes">
                             <i class="material-icons">qr_code</i>
                             <span>Barcode Generator</span>
                         </a>
@@ -575,19 +596,31 @@
                 <div class="nav-section-title">Reports</div>
                 <ul class="nav-menu">
                     <li class="nav-item">
-                        <a href="/sales_filter" class="nav-link" data-page="/sales_filter" data-title="Sales Report">
+                        <a href="/sales_filter" class="nav-link" data-page="/sales_filter" data-title="Sales Report" data-tooltip="View Sales Report">
                             <i class="material-icons">point_of_sale</i>
                             <span>Sales Report</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="/stock_filter" class="nav-link" data-page="/stock_filter" data-title="Stock Report">
+                        <a href="/stock_filter" class="nav-link" data-page="/stock_filter" data-title="Stock Report" data-tooltip="View Stock Report">
                             <i class="material-icons">assessment</i>
                             <span>Stock Report</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="/backup" class="nav-link" data-page="/backup" data-title="Backup">
+                        <a href="/returns" class="nav-link" data-page="/returns" data-title="Returns" data-tooltip="Manage Returns">
+                            <i class="material-icons">keyboard_return</i>
+                            <span>Returns</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/returnedorders" class="nav-link" data-page="/returnedorders" data-title="Returned Orders" data-tooltip="View Returned Orders">
+                            <i class="material-icons">assignment_return</i>
+                            <span>Returned Orders</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/backup" class="nav-link" data-page="/backup" data-title="Backup" data-tooltip="Backup Data">
                             <i class="material-icons">backup</i>
                             <span>Backup</span>
                         </a>

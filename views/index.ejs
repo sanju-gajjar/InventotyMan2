@@ -218,6 +218,30 @@
     <!-- Stats Cards -->
     <div class="stats-grid">
         <!-- Total Sales -->
+             <!-- Quick Actions -->
+    <div class="quick-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-grid">
+            <a href="/billing" class="action-btn">
+                <i class="material-icons">receipt_long</i>
+                New Bill
+            </a>
+            <a href="/viewstocks" class="action-btn">
+                <i class="material-icons">inventory</i>
+                View Stocks
+            </a>
+            <% if (user.role === 'admin') { %>
+            <a href="/stocks" class="action-btn">
+                <i class="material-icons">add_circle</i>
+                Add Stock
+            </a>
+            <a href="/orders" class="action-btn">
+                <i class="material-icons">shopping_cart</i>
+                View Orders
+            </a>
+            <% } %>
+        </div>
+    </div>
         <div class="stat-card success">
             <div class="stat-header">
                 <div>
@@ -369,30 +393,7 @@
         });
     </script>
 
-    <!-- Quick Actions -->
-    <div class="quick-actions">
-        <h2>Quick Actions</h2>
-        <div class="action-grid">
-            <a href="/billing" class="action-btn">
-                <i class="material-icons">receipt_long</i>
-                New Bill
-            </a>
-            <a href="/viewstocks" class="action-btn">
-                <i class="material-icons">inventory</i>
-                View Stocks
-            </a>
-            <% if (user.role === 'admin') { %>
-            <a href="/stocks" class="action-btn">
-                <i class="material-icons">add_circle</i>
-                Add Stock
-            </a>
-            <a href="/orders" class="action-btn">
-                <i class="material-icons">shopping_cart</i>
-                View Orders
-            </a>
-            <% } %>
-        </div>
-    </div>
+
 </main>
 
 <%- include('footer') %>

@@ -115,8 +115,9 @@ exports.fetStockItem = function (req, callback) {
     const stockCollection = db.collection('stocks');
 
     const item_id = req.body.itemid;
+    // Use regex to match items starting with the entered characters
     stockCollection.find({
-        ItemID: item_id,
+        ItemID: { $regex: '^' + item_id, $options: 'i' },
     }).toArray((err, rows) => {
         if (!err) {
            let result={

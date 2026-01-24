@@ -87,16 +87,17 @@
         <form action="/submitstock" method="POST">
             <div class="form-grid">
                 <div class="form-group">
-                    <label class="form-label">Item ID</label>
-                    <input type="text" name="itemid" class="form-input" required>
+                    <label class="form-label">Item ID (7 digits)</label>
+                    <input type="text" name="itemid" id="itemid" class="form-input" pattern="[0-9]{7}" maxlength="7" title="Enter 7-digit Item ID" required>
+                    <small style="color: var(--gray-500); font-size: 12px;">Enter 7-digit ID to auto-fill from vendor bills</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Item Name</label>
-                    <input type="text" name="itemname" class="form-input" required>
+                    <input type="text" name="itemname" id="itemname" class="form-input" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Category</label>
-                    <select name="category" class="form-select" required>
+                    <select name="category" id="category" class="form-select" required>
                         <option value="">Select Category</option>
                         <% category.forEach(function(cat){ %>
                         <option value="<%= cat.Category %>"><%= cat.Category %></option>
@@ -105,7 +106,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Brand</label>
-                    <select name="brand" class="form-select" required>
+                    <select name="brand" id="brand" class="form-select" required>
                         <option value="">Select Brand</option>
                         <% brand.forEach(function(b){ %>
                         <option value="<%= b.Brand %>"><%= b.Brand %></option>
@@ -114,16 +115,44 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Size</label>
-                    <input type="text" name="size" class="form-input" required>
+                    <input type="text" name="size" id="size" class="form-input" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Amount</label>
-                    <input type="number" name="amount" class="form-input" min="0" step="0.01" required>
+                    <input type="number" name="amount" id="amount" class="form-input" min="0" step="0.01" required>
                 </div>
             </div>
             <button type="submit" class="btn-submit">Add Stock Item</button>
         </form>
     </div>
+
+    <script>
+        // Fetch item details from vendor bills when 7-digit Item ID is entered
+        document.getElementById('itemid').addEventListener('input', function() {
+            const itemId = this.value;
+            
+            if (itemId.length === 7 && /^\d{7}$/.test(itemId)) {
+                fetch('/fetchvendoritem', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ itemid: itemId })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.item) {
+                        const item = data.item;
+                        document.getElementById('itemname').value = item.ItemName || '';
+                        document.getElementById('category').value = item.Category || '';
+                        document.getElementById('brand').value = item.Brand || '';
+                        // Note: Not filling unit price or amount - user decides this
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching vendor item:', err);
+                });
+            }
+        });
+    </script>
 </main>
 
 <%- include('footer') %>

@@ -1101,6 +1101,34 @@ app.post('/submitstock', checkAuthenticated, (req, res) => {
         ':' +
         date_format.getSeconds();
 
+    // Check if it's a single item submission (from stocks.ejs form)
+    if (request1.itemid && !request1.itemid1) {
+        const stockItem = {
+            UserBy: getUserRole(req),
+            ItemID: request1.itemid,
+            ItemName: request1.itemname,
+            Category: request1.category,
+            Brand: request1.brand.toUpperCase(),
+            Size: parseInt(request1.size),
+            Amount: parseFloat(request1.amount),
+            StockDate: transaction_date,
+            StockTime: transaction_time,
+            TDay: date_format.getDate(),
+            TMonth: date_format.getMonth() + 1,
+            TYear: date_format.getFullYear()
+        };
+
+        stockCollection.insertOne(stockItem, (err, result) => {
+            if (err) {
+                console.error('Error inserting value:', err);
+                return;
+            }
+            res.redirect('/viewstocks');
+        });
+        return;
+    }
+
+    // Handle multiple items (numbered fields)
     const new_req = {};
 
     for (const i in request1) {
@@ -1146,6 +1174,11 @@ app.post('/submitstock', checkAuthenticated, (req, res) => {
         })
     })
 
+    if (stockAdd.length === 0) {
+        console.error('No stock items to insert');
+        return res.redirect('/viewstocks');
+    }
+
     stockCollection.insertMany(stockAdd, (err, result) => {
         if (err) {
             console.error('Error inserting values:', err);
@@ -1183,6 +1216,26 @@ app.post('/deleteitem', checkAuthenticated, (req, res) => {
 
 })
 
+app.post('/addcategory', checkAuthenticated, (req, res) => {
+
+    const categoriesCollection = db.collection('categories');
+
+    const categoryName = req.body.categoryname;
+
+    categoriesCollection.insertOne({
+        Category: categoryName
+    }, (err2, result) => {
+        if (err2) {
+            console.error('Error adding category:', err2);
+            return;
+        }
+
+        res.redirect('/categories');
+
+    });
+
+})
+
 app.post('/deletecategory', checkAuthenticated, (req, res) => {
 
     const categoriesCollection = db.collection('categories');
@@ -1199,6 +1252,26 @@ app.post('/deletecategory', checkAuthenticated, (req, res) => {
         }
 
         res.redirect('/categories');
+
+    });
+
+})
+
+app.post('/addbrand', checkAuthenticated, (req, res) => {
+
+    const brandsCollection = db.collection('brands');
+
+    const brandName = req.body.brandname;
+
+    brandsCollection.insertOne({
+        Brand: brandName
+    }, (err2, result) => {
+        if (err2) {
+            console.error('Error adding brand:', err2);
+            return;
+        }
+
+        res.redirect('/brands');
 
     });
 
@@ -1228,6 +1301,301 @@ app.post('/deletebrand', checkAuthenticated, (req, res) => {
 
     });
 
+});
+
+// Vendor Bills Routes
+app.get('/vendorbills', checkAuthenticated, (req, res) => {
+    const vendorBillsCollection = db.collection('vendorbills');
+    
+    vendorBillsCollection.find().sort({ _id: -1 }).toArray((err, bills) => {
+        if (err) {
+            console.error('Error querying vendor bills:', err);
+            return res.status(500).send('Error loading vendor bills');
+        }
+
+        res.render('vendorbills.ejs', {
+            user: getUserRole(req),
+            bills: bills || []
+        });
+    });
+});
+
+app.get('/addvendorbill', checkAuthenticated, (req, res) => {
+    const categoriesCollection = db.collection('categories');
+    const brandsCollection = db.collection('brands');
+
+    categoriesCollection.find().toArray((err1, categories) => {
+        if (err1) {
+            console.error('Error querying categories:', err1);
+            return res.status(500).send('Error loading categories');
+        }
+
+        brandsCollection.find().toArray((err2, brands) => {
+            if (err2) {
+                console.error('Error querying brands:', err2);
+                return res.status(500).send('Error loading brands');
+            }
+
+            res.render('addvendorbill.ejs', {
+                user: getUserRole(req),
+                category: categories.sort(),
+                brand: brands.sort()
+            });
+        });
+    });
+});
+
+app.post('/submitvendorbill', checkAuthenticated, (req, res) => {
+    const vendorBillsCollection = db.collection('vendorbills');
+    const request = req.body;
+
+    const date_format = new Date();
+    const created_date = date_format.getDate() + '/' + (date_format.getMonth() + 1) + '/' + date_format.getFullYear();
+    const created_time = date_format.getHours() + ':' + date_format.getMinutes() + ':' + date_format.getSeconds();
+
+    // Parse items from numbered fields
+    const items = [];
+    let i = 1;
+    while (request[`itemid${i}`]) {
+        const quantity = parseFloat(request[`quantity${i}`]) || 0;
+        const unitPrice = parseFloat(request[`unitprice${i}`]) || 0;
+        const gstPercent = parseFloat(request[`gstpercent${i}`]) || 0;
+        const gstAmount = parseFloat(request[`gstamount${i}`]) || 0;
+        const total = parseFloat(request[`total${i}`]) || 0;
+        
+        items.push({
+            ItemID: request[`itemid${i}`],
+            ItemName: request[`itemname${i}`],
+            Category: request[`category${i}`],
+            Brand: request[`brand${i}`],
+            Quantity: quantity,
+            UnitPrice: unitPrice,
+            GSTPercent: gstPercent,
+            GSTAmount: gstAmount,
+            Total: total
+        });
+        i++;
+    }
+
+    const vendorBill = {
+        VendorName: request.vendorname,
+        VendorPhone: request.vendorphone || '',
+        BillNumber: request.billnumber,
+        BillDate: request.billdate,
+        Items: items,
+        GrandTotal: parseFloat(request.grandtotal) || 0,
+        CreatedDate: created_date,
+        CreatedTime: created_time,
+        CreatedBy: getUserRole(req).user,
+        TDay: date_format.getDate(),
+        TMonth: date_format.getMonth() + 1,
+        TYear: date_format.getFullYear()
+    };
+
+    vendorBillsCollection.insertOne(vendorBill, (err, result) => {
+        if (err) {
+            console.error('Error inserting vendor bill:', err);
+            return res.status(500).send('Error saving vendor bill');
+        }
+
+        res.redirect('/vendorbills');
+    });
+});
+
+app.get('/getvendorbill/:id', checkAuthenticated, (req, res) => {
+    const vendorBillsCollection = db.collection('vendorbills');
+    const ObjectID = require('mongodb').ObjectID;
+
+    try {
+        const billId = new ObjectID(req.params.id);
+        vendorBillsCollection.findOne({ _id: billId }, (err, bill) => {
+            if (err) {
+                console.error('Error fetching vendor bill:', err);
+                return res.json({ success: false, error: 'Error fetching bill' });
+            }
+
+            res.json({ success: true, bill: bill });
+        });
+    } catch (err) {
+        console.error('Invalid bill ID:', err);
+        res.json({ success: false, error: 'Invalid bill ID' });
+    }
+});
+
+app.post('/deletevendorbill', checkAuthenticated, (req, res) => {
+    const vendorBillsCollection = db.collection('vendorbills');
+    const ObjectID = require('mongodb').ObjectID;
+
+    try {
+        const billId = new ObjectID(req.body.billid);
+        vendorBillsCollection.deleteOne({ _id: billId }, (err, result) => {
+            if (err) {
+                console.error('Error deleting vendor bill:', err);
+                return res.status(500).send('Error deleting bill');
+            }
+
+            res.redirect('/vendorbills');
+        });
+    } catch (err) {
+        console.error('Invalid bill ID:', err);
+        res.redirect('/vendorbills');
+    }
+});
+
+app.post('/fetchvendoritem', checkAuthenticated, (req, res) => {
+    const vendorBillsCollection = db.collection('vendorbills');
+    const itemId = req.body.itemid;
+
+    // Search for the item in vendor bills
+    vendorBillsCollection.findOne(
+        { 'Items.ItemID': itemId },
+        (err, bill) => {
+            if (err) {
+                console.error('Error fetching vendor item:', err);
+                return res.json({ success: false, error: 'Error fetching item' });
+            }
+
+            if (bill && bill.Items) {
+                // Find the specific item in the Items array
+                const item = bill.Items.find(i => i.ItemID === itemId);
+                if (item) {
+                    return res.json({ 
+                        success: true, 
+                        item: {
+                            ItemID: item.ItemID,
+                            ItemName: item.ItemName,
+                            Category: item.Category,
+                            Brand: item.Brand
+                            // Not including UnitPrice or other price-related fields
+                        }
+                    });
+                }
+            }
+
+            res.json({ success: false, message: 'Item not found in vendor bills' });
+        }
+    );
+});
+
+// Returns Management Routes
+app.get('/returns', checkAuthenticated, (req, res) => {
+    const ordersCollection = db.collection('orders');
+    const phone = req.query.phone;
+
+    if (!phone) {
+        return res.render('returns.ejs', {
+            user: getUserRole(req),
+            phone: null,
+            orders: null,
+            customerInfo: null
+        });
+    }
+
+    // Search orders by phone number
+    ordersCollection.find({ CustomerPhone: phone }).toArray((err, orders) => {
+        if (err) {
+            console.error('Error querying orders:', err);
+            return res.status(500).send('Error loading orders');
+        }
+
+        const customerInfo = orders.length > 0 ? {
+            CustomerName: orders[0].CustomerName,
+            CustomerPhone: orders[0].CustomerPhone
+        } : {};
+
+        res.render('returns.ejs', {
+            user: getUserRole(req),
+            phone: phone,
+            orders: orders || [],
+            customerInfo: customerInfo
+        });
+    });
+});
+
+app.post('/markreturn', checkAuthenticated, (req, res) => {
+    const ordersCollection = db.collection('orders');
+    const ObjectID = require('mongodb').ObjectID;
+
+    try {
+        const orderId = new ObjectID(req.body.orderid);
+        const phone = req.body.phone;
+
+        ordersCollection.updateOne(
+            { _id: orderId },
+            { $set: { Returned: true, ReturnedDate: new Date().toISOString(), ReturnedBy: getUserRole(req).user } },
+            (err, result) => {
+                if (err) {
+                    console.error('Error marking return:', err);
+                    return res.status(500).send('Error marking return');
+                }
+
+                res.redirect(`/returns?phone=${phone}`);
+            }
+        );
+    } catch (err) {
+        console.error('Invalid order ID:', err);
+        res.redirect('/returns');
+    }
+});
+
+app.post('/markreturnbytransaction', checkAuthenticated, (req, res) => {
+    const ordersCollection = db.collection('orders');
+    const transactionId = req.body.transactionid;
+    const phone = req.body.phone;
+
+    ordersCollection.updateMany(
+        { TransactionID: transactionId },
+        { $set: { Returned: true, ReturnedDate: new Date().toISOString(), ReturnedBy: getUserRole(req).user } },
+        (err, result) => {
+            if (err) {
+                console.error('Error marking returns:', err);
+                return res.status(500).send('Error marking returns');
+            }
+
+            res.redirect(`/returns?phone=${phone}`);
+        }
+    );
+});
+
+app.get('/returnedorders', checkAuthenticated, (req, res) => {
+    const ordersCollection = db.collection('orders');
+
+    ordersCollection.find({ Returned: true }).sort({ _id: -1 }).toArray((err, orders) => {
+        if (err) {
+            console.error('Error querying returned orders:', err);
+            return res.status(500).send('Error loading returned orders');
+        }
+
+        res.render('returnedorders.ejs', {
+            user: getUserRole(req),
+            orders: orders || []
+        });
+    });
+});
+
+app.post('/unreturned', checkAuthenticated, (req, res) => {
+    const ordersCollection = db.collection('orders');
+    const ObjectID = require('mongodb').ObjectID;
+
+    try {
+        const orderId = new ObjectID(req.body.orderid);
+
+        ordersCollection.updateOne(
+            { _id: orderId },
+            { $set: { Returned: false }, $unset: { ReturnedDate: "", ReturnedBy: "" } },
+            (err, result) => {
+                if (err) {
+                    console.error('Error unmarking return:', err);
+                    return res.status(500).send('Error unmarking return');
+                }
+
+                res.redirect('/returnedorders');
+            }
+        );
+    } catch (err) {
+        console.error('Invalid order ID:', err);
+        res.redirect('/returnedorders');
+    }
 });
 
 app.post('/sendmail', checkAuthenticated, async (req, res) => {

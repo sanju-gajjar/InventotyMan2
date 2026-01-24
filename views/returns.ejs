@@ -1,0 +1,300 @@
+<%- include('header', { pageTitle: 'Mark Returns' }) %>
+
+<main class="app-main">
+    <style>
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0 0 8px 0;
+        }
+
+        .page-header p {
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        .search-card {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .form-group {
+            flex: 1;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-search {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-search:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .results-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .results-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--dark);
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: var(--light);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--dark);
+            border-bottom: 2px solid var(--gray-300);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-returned {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .btn-mark-return {
+            padding: 6px 16px;
+            background: var(--danger);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .btn-mark-return:disabled {
+            background: var(--gray-400);
+            cursor: not-allowed;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray-500);
+        }
+
+        .empty-state i {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .alert {
+            padding: 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+    </style>
+
+    <div class="page-header">
+        <h1>Mark Order Returns</h1>
+        <p>Search by customer phone number to mark orders as returned</p>
+    </div>
+
+    <div class="search-card">
+        <form method="GET" action="/returns" class="search-form">
+            <div class="form-group">
+                <label class="form-label">Customer Phone Number</label>
+                <input type="text" name="phone" class="form-input" placeholder="Enter phone number" 
+                       value="<%= phone || '' %>" required>
+            </div>
+            <button type="submit" class="btn-search">
+                <i class="material-icons" style="vertical-align: middle; font-size: 18px;">search</i>
+                Search Orders
+            </button>
+        </form>
+    </div>
+
+    <% if (phone && orders) { %>
+    <div class="results-card">
+        <% if (orders.length > 0) { %>
+        <h3>Orders for <%= customerInfo.CustomerName || 'Customer' %> (<%= phone %>)</h3>
+        <div class="alert alert-info">
+            Found <%= orders.length %> order(s). Click "Mark as Returned" to process returns.
+        </div>
+        
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Transaction ID</th>
+                        <th>Item Name</th>
+                        <th>Category</th>
+                        <th>Brand</th>
+                        <th>Size</th>
+                        <th>Amount</th>
+                        <th>Bill Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% 
+                    const groupedOrders = {};
+                    orders.forEach(order => {
+                        if (!groupedOrders[order.TransactionID]) {
+                            groupedOrders[order.TransactionID] = [];
+                        }
+                        groupedOrders[order.TransactionID].push(order);
+                    });
+                    
+                    Object.keys(groupedOrders).forEach(transactionId => {
+                        const transactionOrders = groupedOrders[transactionId];
+                        transactionOrders.forEach((order, index) => { 
+                    %>
+                    <tr>
+                        <td><strong><%= order.TransactionID %></strong></td>
+                        <td><%= order.ItemName %></td>
+                        <td><%= order.Category %></td>
+                        <td><%= order.Brand %></td>
+                        <td><%= order.Size %></td>
+                        <td>₹<%= parseFloat(order.Amount).toFixed(2) %></td>
+                        <td><%= order.BillDate %></td>
+                        <td>
+                            <% if (order.Returned) { %>
+                                <span class="badge badge-returned">RETURNED</span>
+                            <% } else { %>
+                                <span class="badge badge-active">Active</span>
+                            <% } %>
+                        </td>
+                        <td>
+                            <% if (!order.Returned) { %>
+                            <form method="POST" action="/markreturn" style="display: inline;" 
+                                  onsubmit="return confirm('Mark this order as returned?');">
+                                <input type="hidden" name="orderid" value="<%= order._id %>">
+                                <input type="hidden" name="phone" value="<%= phone %>">
+                                <button type="submit" class="btn-mark-return">Mark as Returned</button>
+                            </form>
+                            <% } else { %>
+                            <button class="btn-mark-return" disabled>Already Returned</button>
+                            <% } %>
+                        </td>
+                    </tr>
+                    <% }); }); %>
+                </tbody>
+            </table>
+        </div>
+
+        <% if (Object.keys(groupedOrders).length > 0) { %>
+        <div style="margin-top: 20px; padding: 16px; background: var(--light); border-radius: 10px;">
+            <strong>Mark Entire Transaction as Returned:</strong>
+            <div style="margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap;">
+                <% Object.keys(groupedOrders).forEach(transactionId => { 
+                    const allReturned = groupedOrders[transactionId].every(o => o.Returned);
+                %>
+                <form method="POST" action="/markreturnbytransaction" style="display: inline;" 
+                      onsubmit="return confirm('Mark all items in transaction <%= transactionId %> as returned?');">
+                    <input type="hidden" name="transactionid" value="<%= transactionId %>">
+                    <input type="hidden" name="phone" value="<%= phone %>">
+                    <button type="submit" class="btn-mark-return" <%= allReturned ? 'disabled' : '' %>>
+                        <%= transactionId %> <%= allReturned ? '(Returned)' : '' %>
+                    </button>
+                </form>
+                <% }); %>
+            </div>
+        </div>
+        <% } %>
+
+        <% } else { %>
+        <div class="empty-state">
+            <i class="material-icons">search_off</i>
+            <h3>No orders found</h3>
+            <p>No orders found for phone number: <%= phone %></p>
+        </div>
+        <% } %>
+    </div>
+    <% } %>
+</main>
+
+<%- include('footer') %>
