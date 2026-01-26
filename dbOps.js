@@ -33,7 +33,14 @@ exports.getHomePage = function (req,callback) {
         console.log(err);
       }
       const pipelineStock = [
-        { $addFields: { total: { $multiply: ["$Amount", "$Size"] } } },
+        { $addFields: {
+          total: {
+            $multiply: [
+              { $toDouble: "$Amount" },
+              { $toDouble: "$Size" }
+            ]
+          }
+        } },
         { $group: { _id: '_id', TotalItemsOrdered: { $sum: '$total' } } }
       ];
       stockCollection.aggregate(pipelineStock).toArray((err, resultStock) => {
