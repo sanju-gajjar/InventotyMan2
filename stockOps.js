@@ -96,18 +96,17 @@ exports.getStockQuery = function (req, callback) {
 }
 exports.deleteStock = function (req, callback) { 
     const stockCollection = db.collection('stocks');
-
     const deleteid = req.body.deleteid;
-
-    stockCollection.deleteMany({
-        ItemID: deleteid
+    const itemname = req.body.itemname;
+    // Use both ItemID and ItemName for precise deletion
+    stockCollection.deleteOne({
+        ItemID: deleteid,
+        ItemName: itemname
     }, (err, result) => {
         if (err) {
             callback(err, null);
         }
         callback(null, null);
-        
-
     });
 }
 

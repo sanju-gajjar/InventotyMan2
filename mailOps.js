@@ -1,3 +1,5 @@
+const nodemailer = require('nodemailer');
+
 exports.getHomePage = async function sendMail(orderDetails, to) {
 
     var htmlOrderTable = "";
@@ -10,11 +12,20 @@ exports.getHomePage = async function sendMail(orderDetails, to) {
     const transporter = nodemailer.createTransport({
         host: "mail.thecyclehub.co.in", 
         port: 465,
+        secure: true, // use SSL
         auth: {
             user: "phoner@thecyclehub.co.in", 
             pass: "Keyur@123", 
         },
-    }); // Send the email
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 10000, // 10 seconds
+        socketTimeout: 10000, // 10 seconds
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 10
+    }); 
+    
+    // Send the email
     let info = await transporter.sendMail({
         from: '"Keyur Gajjar" <phoner@thecyclehub.co.in>',
         to: to,

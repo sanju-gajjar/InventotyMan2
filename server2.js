@@ -1,3 +1,6 @@
+// Edit stock item (GET)
+
+// Place these routes after app is initialized
 
 
 if (process.env.NODE_ENV !== 'production') {
@@ -402,7 +405,6 @@ app.get('/billing', checkAuthenticated, (req, res) => {
         res.render('bill.ejs', result)
     });
 });
-// ...existing code...
 // Add /fetchorderitem route after app initialization
 app.post('/fetchorderitem', checkAuthenticated, (req, res) => {
     fetchOrderItem(req, (err, result) => {
@@ -602,7 +604,13 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
                         auth: {
                             user: process.env.euser,
                             pass: process.env.pass
-                        }
+                        },
+                        connectionTimeout: 10000, // 10 seconds
+                        greetingTimeout: 10000,
+                        socketTimeout: 10000,
+                        pool: true,
+                        maxConnections: 5,
+                        maxMessages: 10
                     });
                     
                     let info = await transporter.sendMail({
@@ -642,18 +650,37 @@ app.get('/edititem', checkAuthenticated, (req, res) => {
     const ordersCollection = db.collection('orders');
     const customerCollection = db.collection("customer");
 
-    const edititemid = req.query.edititemid;
-    var objectId2 = new ObjectID(edititemid);
-    // First, find the item by _id to get its TransactionID
-    ordersCollection.findOne({ _id: objectId2 }, (err1, item) => {
-        if (err1 || !item) {
-            console.error('Error editing value:', err1);
+    // Accept both ?edititemid= and ?id= for compatibility
+    const edititemid = req.query.edititemid || req.query.id;
+    if (!edititemid) {
+        return res.status(400).send('Missing order id');
+    }
+    let objectId2 = null;
+    try {
+        objectId2 = new ObjectID(edititemid);
+    } catch (e) {
+        objectId2 = null;
+    }
+    // Try to find by ObjectID first, then by TransactionID
+    const findOrder = objectId2 ? { _id: objectId2 } : { TransactionID: edititemid };
+    console.log('Searching for order with:', findOrder);
+    ordersCollection.findOne(findOrder, (err1, item) => {
+        if (err1) {
+            console.error('Error editing value (DB error):', err1);
+            return res.status(500).send('Database error while searching for order');
+        }
+        if (!item) {
+            console.error('Order not found for:', findOrder);
             return res.status(404).send('Order item not found');
         }
         // Now, find all items with the same TransactionID
         ordersCollection.find({ TransactionID: item.TransactionID }).toArray((err2, items) => {
-            if (err2 || !items || items.length === 0) {
-                console.error('Error fetching order items:', err2);
+            if (err2) {
+                console.error('Error fetching order items (DB error):', err2);
+                return res.status(500).send('Database error while fetching order items');
+            }
+            if (!items || items.length === 0) {
+                console.error('Order items not found for TransactionID:', item.TransactionID);
                 return res.status(404).send('Order items not found');
             }
             customerCollection.find({ PhoneNumber: items[0].CustomerPhone }).toArray((err3, customers) => {
@@ -666,7 +693,6 @@ app.get('/edititem', checkAuthenticated, (req, res) => {
                     Address: items[0].CustomerAddress,
                     Pincode: ''
                 };
-                
                 res.render("editOrder.ejs", {
                     user: getUserRole(req),
                     orderItems: items,
@@ -1670,7 +1696,13 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
             auth: {
                 user: process.env.euser,
                 pass: process.env.pass
-            }
+            },
+            connectionTimeout: 10000, // 10 seconds
+            greetingTimeout: 10000,
+            socketTimeout: 10000,
+            pool: true,
+            maxConnections: 5,
+            maxMessages: 10
         });
         try {
 
@@ -1680,7 +1712,7 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
                 to: CustomerEmail,
                 subject: `Thank for shoping at Phoner #Invoice: ${invoiceNumber}`,
                 text: `Hi, ${customerName}`,
-                html: `<!DOCTYPE html PUBLIC'-//W3C//DTD XHTML 1.0 Transitional//EN''http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html xmlns='http://www.w3.org/1999/xhtml'xmlns:o='urn:schemas-microsoft-com:office:office'><head><meta charset='UTF-8'><meta content='width=device-width, initial-scale=1'name='viewport'><meta name='x-apple-disable-message-reformatting'><meta http-equiv='X-UA-Compatible'content='IE=edge'><meta content='telephone=no'name='format-detection'><title></title><!--[if(mso 16)]><style type='text/css'>a{text-decoration:none;}</style><![endif]--><!--[if gte mso 9]><style>sup{font-size:100%!important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG></o:AllowPNG><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body><div class='es-wrapper-color'><!--[if gte mso 9]><v:background xmlns:v='urn:schemas-microsoft-com:vml'fill='t'><v:fill type='tile'color='#eeeeee'></v:fill></v:background><![endif]--><table class='es-wrapper'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-email-paddings'valign='top'><table cellpadding='0'cellspacing='0'class='es-content esd-header-popover'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7954'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p15t es-p15b es-p10r es-p10l'align='left'><!--[if mso]><table width='580'cellpadding='0'cellspacing='0'><tr><td width='282'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='esd-container-frame'width='282'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='es-infoblock esd-block-text es-m-txt-c'align='left'><p style='font-family: arial, helvetica\ neue, helvetica, sans-serif;'><br></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='170'valign='top'><![endif]--><table cellspacing='0'cellpadding='0'align='right'><tbody><tr class='es-hidden'><td class='es-m-p20b esd-container-frame'esd-custom-block-id='7704'width='170'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-spacer es-p5b'align='center'style='font-size:0'><table width='100%'height='100%'cellspacing='0'cellpadding='0'border='0'><tbody><tr><td style='border-bottom: 1px solid #044767; background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%; height: 1px; width: 100%; margin: 0px;'></td></tr></tbody></table></td></tr><tr><td><table cellspacing='0'cellpadding='0'align='right'><tbody><tr><td align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text'align='right'><p>The Cycle Hub</p></td></tr></tbody></table></td><td class='esd-block-image es-p10l'valign='top'align='left'style='font-size:0'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p40t es-p35b es-p35r es-p35l'esd-custom-block-id='7685'style='background-color: #f7f7f7;'bgcolor='#f7f7f7'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-image es-p20t es-p25b es-p35r es-p35l'align='center'style='font-size:0'></td></tr><tr><td class='esd-block-text es-p15b'align='center'><h2 style='color: #333333; font-family: 'open sans', 'helvetica neue', helvetica, arial, sans-serif;'>Thanks for your purchase</h2></td></tr><tr><td class='esd-block-text es-m-txt-l es-p20t'align='left'><h3 style='font-size: 18px;'>Hello ${customerName},</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='left'><p style='font-size: 16px; color: #777777;'>Please find the invoice below for your purchase</p></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p40t es-p40b es-p35r es-p35l'esd-custom-block-id='7685'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p20t'align='center'><h3 style='color: #333333;'>INVOICE</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='center'><p style='font-size: 16px; color: #777777;'>INVOICE NUMBER: ${invoiceNumber}</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table cellpadding='0'cellspacing='0'class='es-content'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p20t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'bgcolor='#eeeeee'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>Order Confirmation#</h4></td><td width='20%'><h4>${invoiceNumber}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody>${htmlOrderTable}</tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p10t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table style='border-top: 3px solid #eeeeee; border-bottom: 3px solid #eeeeee;'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p15t es-p15b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>TOTAL</h4></td><td width='20%'><h4>${total}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7797'align='center'><table class='es-content-body'style='background-color: #1b9ba3;'width='600'cellspacing='0'cellpadding='0'bgcolor='#1b9ba3'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td width='530'align='left'class='esd-container-frame'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-footer'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7684'align='center'><table class='es-footer-body'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p35t es-p40b es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p35b'align='center'><p><b>Keyur Gajjar</b></p></td></tr><tr><td esdev-links-color='#777777'align='left'class='esd-block-text es-m-txt-c es-p5b'><p style='color: #777777;'>Thanks your shooping and waiting for your next visit.</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='esd-footer-popover es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p30t es-p30b es-p20r es-p20l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='560'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div></body></html>`,
+                html: `<!DOCTYPE html PUBLIC'-//W3C//DTD XHTML 1.0 Transitional//EN''http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html xmlns='http://www.w3.org/1999/xhtml'xmlns:o='urn:schemas-microsoft-com:office:office'><head><meta charset='UTF-8'><meta content='width=device-width, initial-scale=1'name='viewport'><meta name='x-apple-disable-message-reformatting'><meta http-equiv='X-UA-Compatible'content='IE=edge'><meta content='telephone=no'name='format-detection'><title></title><!--[if(mso 16)]><style type='text/css'>a{text-decoration:none;}</style><![endif]--><!--[if gte mso 9]><style>sup{font-size:100%!important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG></o:AllowPNG><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body><div class='es-wrapper-color'><!--[if gte mso 9]><v:background xmlns:v='urn:schemas-microsoft-com:vml'fill='t'><v:fill type='tile'color='#eeeeee'></v:fill></v:background><![endif]--><table class='es-wrapper'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-email-paddings'valign='top'><table cellpadding='0'cellspacing='0'class='es-content esd-header-popover'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7954'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p15t es-p15b es-p10r es-p10l'align='left'><!--[if mso]><table width='580'cellpadding='0'cellspacing='0'><tr><td width='282'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='esd-container-frame'width='282'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='es-infoblock esd-block-text es-m-txt-c'align='left'><p style='font-family: arial, helvetica\ neue, helvetica, sans-serif;'><br></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='170'valign='top'><![endif]--><table cellspacing='0'cellpadding='0'align='right'><tbody><tr class='es-hidden'><td class='es-m-p20b esd-container-frame'esd-custom-block-id='7704'width='170'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-spacer es-p5b'align='center'style='font-size:0'><table width='100%'height='100%'cellspacing='0'cellpadding='0'border='0'><tbody><tr><td style='border-bottom: 1px solid #044767; background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%; height: 1px; width: 100%; margin: 0px;'></td></tr></tbody></table></td></tr><tr><td><table cellspacing='0'cellpadding='0'align='right'><tbody><tr><td align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text'align='right'><p>The Cycle Hub</p></td></tr></tbody></table></td><td class='esd-block-image es-p10l'valign='top'align='left'style='font-size:0'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p40t es-p35b es-p35r es-p35l'esd-custom-block-id='7685'style='background-color: #f7f7f7;'bgcolor='#f7f7f7'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-image es-p20t es-p25b es-p35r es-p35l'align='center'style='font-size:0'></td></tr><tr><td class='esd-block-text es-p15b'align='center'><h2 style='color: #333333; font-family: 'open sans', 'helvetica neue', helvetica, arial, sans-serif;'>Thanks for your purchase</h2></td></tr><tr><td class='esd-block-text es-m-txt-l es-p20t'align='left'><h3 style='font-size: 18px;'>Hello ${customerName},</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='left'><p style='font-size: 16px; color: #777777;'>Please find the invoice below for your purchase</p></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p40t es-p40b es-p35r es-p35l'esd-custom-block-id='7685'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p20t'align='center'><h3 style='color: #333333;'>INVOICE</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='center'><p style='font-size: 16px; color: #777777;'>INVOICE NUMBER: ${transactionId}</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p20t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'bgcolor='#eeeeee'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>Order Confirmation#</h4></td><td width='20%'><h4>${invoiceNumber}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody>${htmlOrderTable}</tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p10t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table style='border-top: 3px solid #eeeeee; border-bottom: 3px solid #eeeeee;'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p15t es-p15b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>TOTAL</h4></td><td width='20%'><h4>${total}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7797'align='center'><table class='es-content-body'style='background-color: #1b9ba3;'width='600'cellspacing='0'cellpadding='0'bgcolor='#1b9ba3'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td width='530'align='left'class='esd-container-frame'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-footer'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7684'align='center'><table class='es-footer-body'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p35t es-p40b es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p35b'align='center'><p><b>Keyur Gajjar</b></p></td></tr><tr><td esdev-links-color='#777777'align='left'class='esd-block-text es-m-txt-c es-p5b'><p style='color: #777777;'>Thanks your shooping and waiting for your next visit.</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='esd-footer-popover es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p30t es-p30b es-p20r es-p20l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='560'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div></body></html>`,
             });
             const mailCollection = db.collection('mail');
 
@@ -1716,7 +1748,7 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
 
     });
 });
-// // TEMP: Test mail route for debugging email delivery
+//// // TEMP: Test mail route for debugging email delivery
 // app.get('/testmail', async (req, res) => {
 //     // Log SMTP config for debugging
 //     console.log('SMTP config:', {
@@ -1756,58 +1788,173 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
 //     }
 // });
 app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
-    //   fetchOrderItem(req, async (err, result) => {
-    const filename = req.body.data.filename;
-    const pdf = req.body.data.pdf;
-    const invoiceNumber = req.body.data.invoiceNumber;
-    const customerName = req.body.data.customerName;
-    const customerEmail = req.body.data.customerEmail;
-    const total = req.body.data.totalAmount;
-
-    let transporter = nodemailer.createTransport({
-        host: process.env.ehost,
-        port: 587,
-        secure: false,
-        auth: {
-            user: process.env.euser,
-            pass: process.env.pass
+    // If orderId is provided, fetch order and customer, generate invoice, and send mail
+    const orderId = req.query.orderId || req.body.orderId;
+    if (orderId) {
+        try {
+            const ordersCollection = db.collection('orders');
+            const customerCollection = db.collection('customer');
+            const ObjectID = require('mongodb').ObjectID;
+            // Find the order by _id or TransactionID
+            let orderDoc = await ordersCollection.findOne({ _id: ObjectID.isValid(orderId) ? new ObjectID(orderId) : orderId });
+            if (!orderDoc) {
+                // Try by TransactionID
+                orderDoc = await ordersCollection.findOne({ TransactionID: orderId });
+            }
+            if (!orderDoc) return res.status(404).json({ error: 'Order not found' });
+            // Get all items for this TransactionID
+            const orderItems = await ordersCollection.find({ TransactionID: orderDoc.TransactionID }).toArray();
+            // Get customer info
+            const customer = await customerCollection.findOne({ PhoneNumber: orderDoc.CustomerPhone });
+            // Prepare invoice data for PDF
+            const invoiceData = {
+                transactionId: orderDoc.TransactionID,
+                orders: orderItems,
+                customer: customer || {},
+                billDate: orderDoc.BillDate,
+                customerName: customer ? customer.CustomerName : '',
+                email: customer ? customer.Email : orderDoc.CustomerEmail,
+                totalAmount: orderDoc.Amount
+            };
+            // Use invoiceUtils to generate PDF and HTML (simulate client-side logic)
+            // For now, just send a simple mail (no PDF attached)
+            // You can enhance this to generate PDF server-side if needed
+            let transporter = nodemailer.createTransport({
+                host: process.env.ehost,
+                port: 587,
+                secure: false,
+                auth: {
+                    user: process.env.euser,
+                    pass: process.env.pass
+                },
+                connectionTimeout: 10000, // 10 seconds
+                greetingTimeout: 10000,
+                socketTimeout: 10000,
+                pool: true,
+                maxConnections: 5,
+                maxMessages: 10
+            });
+            let info = await transporter.sendMail({
+                from: 'keyurgajjar91@gmail.com',
+                to: invoiceData.email,
+                subject: `Thanks for purchase at The Phoner #Invoice: ${invoiceData.transactionId}`,
+                text: `Hi, ${invoiceData.customerName}\n Please find the invoice for your purchase`,
+                html: `<h2>Thank you for your purchase!</h2><p>Invoice #: ${invoiceData.transactionId}</p><p>Customer: ${invoiceData.customerName}</p><p>Total: ₹${invoiceData.totalAmount}</p>`
+            });
+            const mailCollection = db.collection('mail');
+            const newMail = {
+                Total: invoiceData.totalAmount,
+                From: 'keyurgajjar91@gmail.com',
+                To: invoiceData.email,
+                MessageId: info.messageId,
+                Subject: `Thanks for purchase at The Phoner #Invoice: ${invoiceData.transactionId}`,
+                SentOn: new Date(),
+                UserBy: getUserRole(req),
+            };
+            await mailCollection.insertOne(newMail);
+            return res.status(200).json({
+                error: null,
+                message: `Message sent: ${info.messageId} to mail: ${invoiceData.email}`
+            });
+        } catch (err) {
+            return res.status(500).json({ error: 'Error Sending mail: ' + err.message });
         }
-    });
-    try {
-        const pdfAttachment = {
-            filename: filename,
-            content: Buffer.from(pdf, 'base64'), // Convert Base64 string to Buffer
-            encoding: 'base64'
-        };
-        let info = await transporter.sendMail({
-            from: 'keyurgajjar91@gmail.com',
-            to: customerEmail,
-            subject: `Thanks for purchase at The Phoner #Invoice: ${invoiceNumber}`,
-            text: `Hi, ${customerName}\n Please find the attachment for the invoice of your purchase`,
-            html: req.body.html,
-            attachments: [pdfAttachment],
+    } else {
+        // Default: existing PDF email logic
+        const filename = req.body.data.filename;
+        const pdf = req.body.data.pdf;
+        const invoiceNumber = req.body.data.invoiceNumber;
+        const customerName = req.body.data.customerName;
+        const customerEmail = req.body.data.customerEmail;
+        const total = req.body.data.totalAmount;
+
+        let transporter = nodemailer.createTransport({
+            host: process.env.ehost,
+            port: 587,
+            secure: false,
+            auth: {
+                user: process.env.euser,
+                pass: process.env.pass
+            },
+            connectionTimeout: 10000, // 10 seconds
+            greetingTimeout: 10000,
+            socketTimeout: 10000,
+            pool: true,
+            maxConnections: 5,
+            maxMessages: 10
         });
-        const mailCollection = db.collection('mail');
-        const newMail = {
-            Total: total,
-            From: 'keyurgajjar91@gmail.com',
-            To: customerEmail,
-            MessageId: info.messageId,
-            Subject: `Thanks for purchase at The Phoner #Invoice: ${invoiceNumber}`,
-            SentOn: new Date(),
-            UserBy: getUserRole(req),
-        };
-        await mailCollection.insertOne(newMail);
-        res.status(200).json({
-            error: null,
-            message: `Message sent: ${info.messageId} to mail: ${customerEmail}`
-        });
-    } catch (err) {
-        res.status(500).json({
-            error: 'Error Sending mail' + err.message
-        });
+        try {
+            const pdfAttachment = {
+                filename: filename,
+                content: Buffer.from(pdf, 'base64'), // Convert Base64 string to Buffer
+                encoding: 'base64'
+            };
+            let info = await transporter.sendMail({
+                from: 'keyurgajjar91@gmail.com',
+                to: customerEmail,
+                subject: `Thanks for purchase at The Phoner #Invoice: ${invoiceNumber}`,
+                text: `Hi, ${customerName}\n Please find the attachment for the invoice of your purchase`,
+                html: req.body.html,
+                attachments: [pdfAttachment],
+            });
+            const mailCollection = db.collection('mail');
+            const newMail = {
+                Total: total,
+                From: 'keyurgajjar91@gmail.com',
+                To: customerEmail,
+                MessageId: info.messageId,
+                Subject: `Thanks for purchase at The Phoner #Invoice: ${invoiceNumber}`,
+                SentOn: new Date(),
+                UserBy: getUserRole(req),
+            };
+            await mailCollection.insertOne(newMail);
+            res.status(200).json({
+                error: null,
+                message: `Message sent: ${info.messageId} to mail: ${customerEmail}`
+            });
+        } catch (err) {
+            res.status(500).json({
+                error: 'Error Sending mail' + err.message
+            });
+        }
     }
 });
+
+// Edit stock item (GET)
+app.get('/editstock', checkAuthenticated, async (req, res) => {
+    const stockCollection = db.collection('stocks');
+    const ItemID = req.query.ItemID;
+    const ItemName = req.query.ItemName;
+    if (!ItemID || !ItemName) {
+        return res.status(400).send('Missing ItemID or ItemName');
+    }
+    const stock = await stockCollection.findOne({ ItemID: ItemID, ItemName: ItemName });
+    if (!stock) {
+        return res.status(404).send('Stock item not found');
+    }
+    res.render('editStock.ejs', { stock });
+});
+
+// Edit stock item (POST)
+app.post('/editstock', checkAuthenticated, async (req, res) => {
+    const stockCollection = db.collection('stocks');
+    const { ItemID, ItemName, Category, Brand, Size, Amount, StockDate, StockTime, orig_ItemID, orig_ItemName } = req.body;
+    // Use original values for filter, allow changing ItemName
+    if (!orig_ItemID || !orig_ItemName) {
+        return res.status(400).send('Missing original ItemID or ItemName');
+    }
+    console.log('EditStock POST:', {
+        filter: { ItemID: orig_ItemID, ItemName: orig_ItemName },
+        set: { ItemName, Category, Brand, Size, Amount, StockDate, StockTime }
+    });
+    const result = await stockCollection.updateOne(
+        { ItemID: orig_ItemID, ItemName: orig_ItemName },
+        { $set: { ItemName, Category, Brand, Size, Amount: parseFloat(Amount), StockDate, StockTime } }
+    );
+   // console.log('Mongo update result:', result);
+    res.redirect('/viewstocks');
+});
+
 // Function to split the array into chunks of given size
 function chunkArray(array, chunkSize) {
     const chunks = [];

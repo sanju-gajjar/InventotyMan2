@@ -359,11 +359,12 @@
                         <td><%= order.StockTime %></td>
                         <td>
                             <div class="action-buttons">
-                                <a href="/edititem?id=<%= order.ItemID %>" class="btn-edit">
+                                <a href="/editstock?ItemID=<%= order.ItemID %>&ItemName=<%= encodeURIComponent(order.ItemName) %>" class="btn-edit">
                                     <i class="material-icons" style="font-size: 14px; vertical-align: middle;">edit</i>
                                 </a>
                                 <form action="/deletestock" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this item?');">
                                     <input type="hidden" name="deleteid" value="<%= order.ItemID %>">
+                                    <input type="hidden" name="itemname" value="<%= order.ItemName %>">
                                     <button type="submit" class="btn-delete">
                                         <i class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</i>
                                     </button>

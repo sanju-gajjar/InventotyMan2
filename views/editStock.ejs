@@ -1,0 +1,127 @@
+<%- include('header', { pageTitle: 'Edit Stock Item' }) %>
+<main class="app-main">
+    <style>
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0;
+        }
+        .form-card {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .form-group {
+            margin-bottom: 0;
+        }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+        }
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+        }
+        .form-input:focus, .form-select:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+        }
+        .btn-cancel {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 12px 24px;
+            background: var(--gray-200);
+            color: var(--gray-700);
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .btn-cancel:hover {
+            background: var(--gray-300);
+        }
+    </style>
+    <div class="page-header">
+        <h1>Edit Stock Item</h1>
+    </div>
+    <div class="form-card">
+        <form action="/editstock" method="POST">
+            <div class="form-grid">
+                <input type="hidden" name="orig_ItemID" value="<%= stock.ItemID %>">
+                <input type="hidden" name="orig_ItemName" value="<%= stock.ItemName %>">
+                <div class="form-group">
+                    <label class="form-label">Item Name</label>
+                    <input type="text" name="ItemName" value="<%= stock.ItemName %>" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <input type="text" name="Category" value="<%= stock.Category %>" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Brand</label>
+                    <input type="text" name="Brand" value="<%= stock.Brand %>" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Size</label>
+                    <input type="text" name="Size" value="<%= stock.Size %>" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Amount</label>
+                    <input type="number" name="Amount" value="<%= stock.Amount %>" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Stock Date</label>
+                    <input type="text" name="StockDate" value="<%= stock.StockDate %>" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Stock Time</label>
+                    <input type="text" name="StockTime" value="<%= stock.StockTime %>" class="form-input" required>
+                </div>
+            </div>
+            <button type="submit" class="btn-submit">Save Changes</button>
+            <a href="/viewstocks" class="btn-cancel">Cancel</a>
+        </form>
+    </div>
+</main>
+<%- include('footer') %>
