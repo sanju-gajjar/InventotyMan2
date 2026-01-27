@@ -298,6 +298,142 @@
             font-size: 14px;
             font-weight: 600;
             color: var(--gray-600);
+        }
+
+        /* Product Selection Modal */
+        .product-selection-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+
+        .product-selection-modal.show {
+            display: flex;
+        }
+
+        .product-selection-content {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .product-selection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        .product-selection-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .product-selection-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: var(--gray-500);
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .product-selection-close:hover {
+            background: var(--gray-100);
+            color: var(--dark);
+        }
+
+        .product-selection-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .product-selection-item {
+            padding: 20px;
+            border: 2px solid var(--gray-200);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .product-selection-item:hover {
+            border-color: var(--primary);
+            background: var(--light);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .product-selection-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .product-selection-item-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .product-selection-item-price {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        .product-selection-item-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .product-selection-item-detail {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .product-selection-item-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .product-selection-item-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--dark)
             z-index: 2;
             transition: color 0.3s;
             padding: 8px;
@@ -533,6 +669,22 @@
             <input type="hidden" name="totaldiscount" id="totaldiscount">
             <input type="hidden" name="totalgst" id="totalgst">
         </form>
+
+        <!-- Product Selection Modal -->
+        <div id="productSelectionModal" class="product-selection-modal">
+            <div class="product-selection-content">
+                <div class="product-selection-header">
+                    <div class="product-selection-title">
+                        <i class="material-icons">inventory_2</i>
+                        Multiple Items Found - Select One
+                    </div>
+                    <button class="product-selection-close" onclick="closeProductSelectionModal()">&times;</button>
+                </div>
+                <div id="productSelectionList" class="product-selection-list">
+                    <!-- Product items will be added dynamically -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -804,13 +956,14 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.rows && data.rows.length > 0) {
-                    const item = data.rows[0];
-                    document.getElementById(`itemname${rowNum}`).value = item.ItemName || '';
-                    document.getElementById(`category${rowNum}`).value = item.Category || '';
-                    document.getElementById(`brand${rowNum}`).value = item.Brand || '';
-                    document.getElementById(`size${rowNum}`).value = item.Size || '';
-                    document.getElementById(`price${rowNum}`).value = item.Amount || 0;
-                    calculateRow(rowNum);
+                    if (data.rows.length > 1) {
+                        // Multiple items found - show selection modal
+                        showProductSelectionModal(data.rows, rowNum);
+                    } else {
+                        // Single item found - populate directly
+                        const item = data.rows[0];
+                        populateItemFields(item, rowNum);
+                    }
                 } else {
                     showAlert('Item not found!', 'danger');
                 }
@@ -820,6 +973,76 @@
                 showAlert('Error fetching item details', 'danger');
             });
         }
+
+        function populateItemFields(item, rowNum) {
+            document.getElementById(`itemname${rowNum}`).value = item.ItemName || '';
+            document.getElementById(`category${rowNum}`).value = item.Category || '';
+            document.getElementById(`brand${rowNum}`).value = item.Brand || '';
+            document.getElementById(`size${rowNum}`).value = item.Size || '';
+            document.getElementById(`price${rowNum}`).value = item.Amount || 0;
+            calculateRow(rowNum);
+        }
+
+        function showProductSelectionModal(items, rowNum) {
+            const modal = document.getElementById('productSelectionModal');
+            const list = document.getElementById('productSelectionList');
+            
+            // Clear previous items
+            list.innerHTML = '';
+            
+            // Add items to the list
+            items.forEach(item => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'product-selection-item';
+                itemDiv.onclick = () => {
+                    populateItemFields(item, rowNum);
+                    closeProductSelectionModal();
+                };
+                
+                itemDiv.innerHTML = `
+                    <div class="product-selection-item-header">
+                        <div class="product-selection-item-name">${item.ItemName || 'N/A'}</div>
+                        <div class="product-selection-item-price">₹${item.Amount || 0}</div>
+                    </div>
+                    <div class="product-selection-item-details">
+                        <div class="product-selection-item-detail">
+                            <span class="product-selection-item-label">Category</span>
+                            <span class="product-selection-item-value">${item.Category || 'N/A'}</span>
+                        </div>
+                        <div class="product-selection-item-detail">
+                            <span class="product-selection-item-label">Brand</span>
+                            <span class="product-selection-item-value">${item.Brand || 'N/A'}</span>
+                        </div>
+                        <div class="product-selection-item-detail">
+                            <span class="product-selection-item-label">Size/Model</span>
+                            <span class="product-selection-item-value">${item.Size || 'N/A'}</span>
+                        </div>
+                    </div>
+                `;
+                
+                list.appendChild(itemDiv);
+            });
+            
+            // Show modal
+            modal.classList.add('show');
+        }
+
+        function closeProductSelectionModal() {
+            const modal = document.getElementById('productSelectionModal');
+            modal.classList.remove('show');
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('productSelectionModal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeProductSelectionModal();
+                    }
+                });
+            }
+        });
 
         function calculateRow(rowNum) {
             const price = parseFloat(document.getElementById(`price${rowNum}`).value) || 0;
