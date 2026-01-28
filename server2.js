@@ -384,6 +384,38 @@ app.post('/fetchitem', checkAuthenticated, (req, res) => {
         res.json(result);
     });
 })
+
+// Fetch items by brand and category combination
+app.post('/fetchItemsByBrandCategory', checkAuthenticated, async (req, res) => {
+    try {
+        const stockCollection = db.collection('stocks');
+        const { brand, category } = req.body;
+        
+        // Build query based on provided filters
+        const query = {};
+        if (brand) {
+            query.Brand = { $regex: brand, $options: 'i' };
+        }
+        if (category) {
+            query.Category = { $regex: category, $options: 'i' };
+        }
+        
+        const items = await stockCollection.find(query).toArray();
+        
+        res.json({
+            success: true,
+            status: 200,
+            rows: items
+        });
+    } catch (err) {
+        console.error('Error fetching items by brand/category:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch items'
+        });
+    }
+});
+
 // Delete order by _id
 app.post('/deleteorder', checkAuthenticated, async (req, res) => {
     try {

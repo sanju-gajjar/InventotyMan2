@@ -36,6 +36,7 @@
             padding: 28px;
             margin-bottom: 24px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: visible;
         }
 
         .card-title {
@@ -88,7 +89,7 @@
         }
 
         .table-responsive {
-            overflow-x: auto;
+            overflow: visible;
             margin-top: 20px;
         }
 
@@ -99,17 +100,18 @@
         }
 
         .product-table th:nth-child(1) { width: 50px; } /* Sr */
-        .product-table th:nth-child(2) { width: 120px; } /* Item ID */
-        .product-table th:nth-child(3) { width: 200px; } /* Item Name */
-        .product-table th:nth-child(4) { width: 150px; } /* Category */
-        .product-table th:nth-child(5) { width: 120px; } /* Brand */
-        .product-table th:nth-child(6) { width: 100px; } /* Size/Model */
-        .product-table th:nth-child(7) { width: 100px; } /* Price */
-        .product-table th:nth-child(8) { width: 80px; } /* Qty */
-        .product-table th:nth-child(9) { width: 100px; } /* Discount */
-        .product-table th:nth-child(10) { width: 80px; } /* GST % */
-        .product-table th:nth-child(11) { width: 120px; } /* Total */
-        .product-table th:nth-child(12) { width: 80px; } /* Action */
+        .product-table th:nth-child(2) { width: 120px; } /* Brand */
+        .product-table th:nth-child(3) { width: 120px; } /* Category */
+        .product-table th:nth-child(4) { width: 60px; } /* Search */
+        .product-table th:nth-child(5) { width: 100px; } /* Item ID */
+        .product-table th:nth-child(6) { width: 180px; } /* Item Name */
+        .product-table th:nth-child(7) { width: 80px; } /* Size/Model */
+        .product-table th:nth-child(8) { width: 90px; } /* Price */
+        .product-table th:nth-child(9) { width: 60px; } /* Qty */
+        .product-table th:nth-child(10) { width: 80px; } /* Discount */
+        .product-table th:nth-child(11) { width: 60px; } /* GST % */
+        .product-table th:nth-child(12) { width: 100px; } /* Total */
+        .product-table th:nth-child(13) { width: 60px; } /* Action */
 
         .product-table thead {
             background: linear-gradient(135deg, var(--dark), var(--darker));
@@ -165,6 +167,15 @@
 
         .btn-icon:hover {
             background: var(--gray-100);
+        }
+
+        .btn-icon.primary {
+            color: var(--primary);
+        }
+
+        .btn-icon.primary:hover {
+            background: #e0e7ff;
+            color: var(--primary);
         }
 
         .btn-icon.danger:hover {
@@ -569,14 +580,15 @@
                         <thead>
                             <tr>
                                 <th>Sr.</th>
-                                <th>Item ID</th>
-                                <th>Product Name / Description</th>
-                                <th>Category</th>
                                 <th>Brand</th>
-                                <th>Model / Size</th>
+                                <th>Category</th>
+                                <th>Find</th>
+                                <th>Item ID</th>
+                                <th>Product Name</th>
+                                <th>Size</th>
                                 <th>Price (₹)</th>
                                 <th>Qty</th>
-                                <th>Discount (₹)</th>
+                                <th>Disc (₹)</th>
                                 <th>GST %</th>
                                 <th>Total (₹)</th>
                                 <th>Action</th>
@@ -900,15 +912,20 @@
             row.id = `row${rowCounter}`;
             row.innerHTML = `
                 <td style="text-align: center; font-weight: 700;">${rowCounter}</td>
-                <td><input type="text" name="id${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Scan/Enter ID" required></td>
-                <td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="e.g. Tempered Glass, Phone Case"></td>
-                <td style="position: relative;"><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="e.g. Screen Protector"></td>
-                <td style="position: relative;"><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="e.g. Samsung, Apple"></td>
-                <td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Model/Size"></td>
+                <td style="position: relative;"><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="Brand" class="brand-input" data-row="${rowCounter}"></td>
+                <td style="position: relative;"><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="Category" class="category-input" data-row="${rowCounter}"></td>
+                <td style="text-align: center;">
+                    <button type="button" class="btn-icon primary" onclick="searchItems(${rowCounter})" title="Search Items">
+                        <i class="material-icons">search</i>
+                    </button>
+                </td>
+                <td><input type="text" name="id${rowCounter}" id="itemid${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Item ID"></td>
+                <td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="Product Name" readonly></td>
+                <td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Size" readonly></td>
                 <td><input type="number" name="price${rowCounter}" id="price${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0.00" step="0.01"></td>
                 <td><input type="number" name="unit${rowCounter}" id="quantity${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="1" min="1" value="1" required></td>
-                <td><input type="number" name="discount${rowCounter}" id="discount${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0.00" min="0" value="0" step="0.01"></td>
-                <td><input type="number" name="gst${rowCounter}" id="gst${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="18" min="0" max="100" value="0" step="0.01"></td>
+                <td><input type="number" name="discount${rowCounter}" id="discount${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0" min="0" value="0" step="0.01"></td>
+                <td><input type="number" name="gst${rowCounter}" id="gst${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0" min="0" max="100" value="0" step="0.01"></td>
                 <td style="text-align: center; font-weight: 700;">₹<span id="total${rowCounter}">0.00</span></td>
                 <td style="text-align: center;">
                     <button type="button" class="btn-icon danger" onclick="deleteRow(${rowCounter})">
@@ -919,14 +936,7 @@
             `;
             tbody.appendChild(row);
 
-            // Add event listeners
-            const itemIdInput = row.querySelector('.item-id');
-            itemIdInput.addEventListener('input', function() {
-                if (this.value.length >= 7) {
-                    fetchItemDetails(this.value, rowCounter);
-                }
-            });
-
+            // Add event listeners for calc inputs
             row.querySelectorAll('.calc-input').forEach(input => {
                 input.addEventListener('input', () => {
                     calculateRow(rowCounter);
@@ -936,15 +946,44 @@
             // Setup autocomplete for category and brand if data is available
             const categoryInput = document.getElementById(`category${rowCounter}`);
             const brandInput = document.getElementById(`brand${rowCounter}`);
-            if (categoryInput && Array.isArray(categories) && categories.length > 0) {
-                setupAutocomplete(categoryInput, categories);
-            }
             if (brandInput && Array.isArray(brands) && brands.length > 0) {
                 setupAutocomplete(brandInput, brands);
+            }
+            if (categoryInput && Array.isArray(categories) && categories.length > 0) {
+                setupAutocomplete(categoryInput, categories);
             }
 
             // Recalculate grand total after adding a row
             calculateGrandTotal();
+        }
+
+        // Search items by brand and category combination
+        function searchItems(rowNum) {
+            const brand = document.getElementById(`brand${rowNum}`).value.trim();
+            const category = document.getElementById(`category${rowNum}`).value.trim();
+            
+            if (!brand && !category) {
+                showAlert('Please enter at least Brand or Category to search', 'danger');
+                return;
+            }
+            
+            fetch('/fetchItemsByBrandCategory', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brand, category })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.rows && data.rows.length > 0) {
+                    showProductSelectionModal(data.rows, rowNum);
+                } else {
+                    showAlert('No items found for the selected Brand/Category', 'danger');
+                }
+            })
+            .catch(err => {
+                console.error('Error searching items:', err);
+                showAlert('Error searching items', 'danger');
+            });
         }
 
         function fetchItemDetails(itemId, rowNum) {
@@ -975,6 +1014,7 @@
         }
 
         function populateItemFields(item, rowNum) {
+            document.getElementById(`itemid${rowNum}`).value = item.ItemID || '';
             document.getElementById(`itemname${rowNum}`).value = item.ItemName || '';
             document.getElementById(`category${rowNum}`).value = item.Category || '';
             document.getElementById(`brand${rowNum}`).value = item.Brand || '';
@@ -1006,12 +1046,16 @@
                     </div>
                     <div class="product-selection-item-details">
                         <div class="product-selection-item-detail">
-                            <span class="product-selection-item-label">Category</span>
-                            <span class="product-selection-item-value">${item.Category || 'N/A'}</span>
+                            <span class="product-selection-item-label">Item ID</span>
+                            <span class="product-selection-item-value">${item.ItemID || 'N/A'}</span>
                         </div>
                         <div class="product-selection-item-detail">
                             <span class="product-selection-item-label">Brand</span>
                             <span class="product-selection-item-value">${item.Brand || 'N/A'}</span>
+                        </div>
+                        <div class="product-selection-item-detail">
+                            <span class="product-selection-item-label">Category</span>
+                            <span class="product-selection-item-value">${item.Category || 'N/A'}</span>
                         </div>
                         <div class="product-selection-item-detail">
                             <span class="product-selection-item-label">Size/Model</span>
@@ -1128,31 +1172,50 @@
             let currentFocus = -1;
             if (!Array.isArray(suggestions) || suggestions.length === 0) return;
 
+            // Show suggestions on focus (click into field)
+            input.addEventListener('focus', function() {
+                showSuggestions(this, '');
+            });
+
             input.addEventListener('input', function() {
-                const val = this.value;
+                showSuggestions(this, this.value);
+            });
+
+            function showSuggestions(inputElem, val) {
                 closeAllLists();
-                if (!val) return;
-
                 currentFocus = -1;
+                
                 const list = document.createElement('div');
-                list.setAttribute('id', this.id + 'autocomplete-list');
+                list.setAttribute('id', inputElem.id + 'autocomplete-list');
                 list.setAttribute('class', 'autocomplete-items');
-                this.parentNode.appendChild(list);
+                inputElem.parentNode.appendChild(list);
 
+                // Filter suggestions - show all if no input, or filter by input
                 const matches = suggestions.filter(s =>
                     typeof s === 'string' && s.toLowerCase().includes(val.toLowerCase())
-                ).slice(0, 10);
+                ).slice(0, 15);
+
+                if (matches.length === 0) {
+                    closeAllLists();
+                    return;
+                }
 
                 matches.forEach(item => {
                     const div = document.createElement('div');
-                    div.innerHTML = item;
+                    // Highlight matching text
+                    if (val) {
+                        const regex = new RegExp(`(${val})`, 'gi');
+                        div.innerHTML = item.replace(regex, '<strong>$1</strong>');
+                    } else {
+                        div.innerHTML = item;
+                    }
                     div.addEventListener('click', function() {
-                        input.value = item;
+                        inputElem.value = item;
                         closeAllLists();
                     });
                     list.appendChild(div);
                 });
-            });
+            }
 
             input.addEventListener('keydown', function(e) {
                 let list = document.getElementById(this.id + 'autocomplete-list');
@@ -1201,16 +1264,17 @@
     <style>
         .autocomplete-items {
             position: absolute;
-            border: 1px solid #d4d4d4;
-            border-top: none;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
             z-index: 99999;
             top: 100%;
             left: 0;
-            right: 0;
-            max-height: 250px;
+            min-width: 200px;
+            max-height: 300px;
             overflow-y: auto;
             background: white;
             box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            margin-top: 4px;
         }
         .autocomplete-items div {
             padding: 12px;
@@ -1227,6 +1291,13 @@
         }
         td {
             position: relative;
+            overflow: visible !important;
+        }
+        .product-table tbody {
+            overflow: visible;
+        }
+        .product-table {
+            overflow: visible;
         }
     </style>
 </main>
