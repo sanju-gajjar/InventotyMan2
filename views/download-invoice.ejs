@@ -122,21 +122,33 @@
             const items_arr = [];
 
             invoiceData.orders.forEach((order, index) => {
-                const disc = order.Discount == null ? 0.0 : order.Discount;
+                const disc = order.Discount == null ? 0.0 : parseFloat(order.Discount);
+                const qty = order.Size || 1;
+                const unitPrice = parseFloat(order.Price) || 0;
+                const gstPercent = parseFloat(order.GST) || 0;
+                
+                // Calculate correct amount: (price × qty) - discount + GST
+                const subtotal = unitPrice * qty;
+                const afterDiscount = subtotal - disc;
+                const gstAmount = (afterDiscount * gstPercent) / 100;
+                const lineAmount = afterDiscount + gstAmount;
+                
                 const item_obj = {
                     "noitem": (index + 1),
-                    "quantity": order.Size,
+                    "quantity": qty,
                     "description": order.ItemName + '(' + order.Category + ')' + '-' + order.Brand,
                     "hsn": "",
                     "tax-rate": 0,
-                    "price": parseFloat(order.Amount).toFixed(2),
-                    "salePrice": parseFloat(order.Price).toFixed(2),
-                    "distotal": parseFloat(disc).toFixed(2),
+                    "price": lineAmount.toFixed(2),
+                    "salePrice": unitPrice.toFixed(2),
+                    "distotal": disc.toFixed(2),
                     "GST": order.GST
                 };
-                totalAmount = parseFloat(parseFloat(totalAmount) + order.Amount).toFixed(2);
+                totalAmount = parseFloat(totalAmount) + lineAmount;
                 items_arr.push(item_obj);
             });
+
+            totalAmount = totalAmount.toFixed(2);
 
             const wordsMatter = convertNumberToWords(totalAmount.toString().split('.')[0]) + " And " + 
                               (totalAmount.toString().split('.')[1] > 0 ? convertNumberToWords(totalAmount.toString().split('.')[1]) : "Zero");

@@ -718,6 +718,8 @@ app.post('/edititem', checkAuthenticated, (req, res) => {
         const brands = req.body["brand[]"] || req.body.brand;
         const sizes = req.body["size[]"] || req.body.size;
         const prices = req.body["price[]"] || req.body.price;
+        const discounts = req.body["discount[]"] || req.body.discount;
+        const amounts = req.body["amount[]"] || req.body.amount;
         const transactionID = req.body.transactionID;
 
         // Update all items
@@ -725,7 +727,9 @@ app.post('/edititem', checkAuthenticated, (req, res) => {
         for (let i = 0; i < itemIDs.length; i++) {
                 const size = parseInt(sizes[i]) || 0;
                 const price = parseFloat(prices[i]) || 0;
-                const amount = (price * size) || 0;
+                const discount = parseFloat(discounts[i]) || 0;
+                // Use the amount calculated by the frontend (which includes discount)
+                const amount = parseFloat(amounts[i]) || ((price * size) - discount);
                 
                 updatePromises.push(
                         ordersCollection.updateOne(
@@ -739,6 +743,7 @@ app.post('/edititem', checkAuthenticated, (req, res) => {
                                                 BillDate: billDates[i],
                                                 Size: size,
                                                 Price: price,
+                                                Discount: discount,
                                                 Amount: amount
                                         }
                                 }
