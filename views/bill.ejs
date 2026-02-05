@@ -99,19 +99,20 @@
             table-layout: fixed;
         }
 
-        .product-table th:nth-child(1) { width: 50px; } /* Sr */
-        .product-table th:nth-child(2) { width: 120px; } /* Brand */
-        .product-table th:nth-child(3) { width: 120px; } /* Category */
-        .product-table th:nth-child(4) { width: 60px; } /* Search */
-        .product-table th:nth-child(5) { width: 100px; } /* Item ID */
-        .product-table th:nth-child(6) { width: 180px; } /* Item Name */
-        .product-table th:nth-child(7) { width: 80px; } /* Size/Model */
-        .product-table th:nth-child(8) { width: 90px; } /* Price */
-        .product-table th:nth-child(9) { width: 60px; } /* Qty */
-        .product-table th:nth-child(10) { width: 80px; } /* Discount */
-        .product-table th:nth-child(11) { width: 60px; } /* GST % */
-        .product-table th:nth-child(12) { width: 100px; } /* Total */
-        .product-table th:nth-child(13) { width: 60px; } /* Action */
+        .product-table th:nth-child(1) { width: 40px; } /* Sr */
+        .product-table th:nth-child(2) { width: 100px; } /* Brand */
+        .product-table th:nth-child(3) { width: 100px; } /* Category */
+        .product-table th:nth-child(4) { width: 50px; } /* Search */
+        .product-table th:nth-child(5) { width: 90px; } /* Item ID */
+        .product-table th:nth-child(6) { width: 150px; } /* Item Name */
+        .product-table th:nth-child(7) { width: 70px; } /* Size/Model */
+        .product-table th:nth-child(8) { width: 130px; } /* Serial No */
+        .product-table th:nth-child(9) { width: 80px; } /* Price */
+        .product-table th:nth-child(10) { width: 50px; } /* Qty */
+        .product-table th:nth-child(11) { width: 70px; } /* Discount */
+        .product-table th:nth-child(12) { width: 55px; } /* GST % */
+        .product-table th:nth-child(13) { width: 90px; } /* Total */
+        .product-table th:nth-child(14) { width: 60px; } /* Action */
 
         .product-table thead {
             background: linear-gradient(135deg, var(--dark), var(--darker));
@@ -586,6 +587,7 @@
                                 <th>Item ID</th>
                                 <th>Product Name</th>
                                 <th>Size</th>
+                                <th>Serial No.</th>
                                 <th>Price (₹)</th>
                                 <th>Qty</th>
                                 <th>Disc (₹)</th>
@@ -919,9 +921,10 @@
                         <i class="material-icons">search</i>
                     </button>
                 </td>
-                <td><input type="text" name="id${rowCounter}" id="itemid${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Item ID"></td>
-                <td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="Product Name" readonly></td>
-                <td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Size" readonly></td>
+                <td><input type="text" name="id${rowCounter}" id="itemid${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Item ID (optional)"></td>
+                <td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="Product Name" required></td>
+                <td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Size"></td>
+                <td><input type="text" name="serialNo${rowCounter}" id="serialNo${rowCounter}" placeholder="S.No (comma separated)" title="Enter serial numbers separated by commas, e.g. SN001, SN002"></td>
                 <td><input type="number" name="price${rowCounter}" id="price${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0.00" step="0.01"></td>
                 <td><input type="number" name="unit${rowCounter}" id="quantity${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="1" min="1" value="1" required></td>
                 <td><input type="number" name="discount${rowCounter}" id="discount${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0" min="0" value="0" step="0.01"></td>

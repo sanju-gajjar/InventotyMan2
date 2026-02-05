@@ -333,14 +333,69 @@
                 </ul>
             </div>
             <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">Low Stock Alerts</h2>
-                <ul style="list-style:none; padding:0;">
-                    <% lowStock.forEach(function(s){ %>
-                        <li style="margin-bottom:12px; font-size:16px; font-weight:600;">
-                            <span style="color:var(--danger);"><%= s.ItemName %></span> (ID: <%= s.ItemID %>) — <strong><%= s.Size %></strong> left
-                        </li>
-                    <% }); %>
-                </ul>
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">🔴 OUT OF STOCK (Critical)</h2>
+                <% if (outOfStock && outOfStock.length > 0) { %>
+                    <ul style="list-style:none; padding:0;">
+                        <% outOfStock.forEach(function(s){ %>
+                            <li style="margin-bottom:12px; font-size:16px; font-weight:600; padding:12px; background:#fee; border-left:4px solid #dc2626; border-radius:4px;">
+                                <span style="color:#dc2626;"><%= s.ItemName %></span> 
+                                <small style="color:#666;">(ID: <%= s.ItemID %>)</small> — 
+                                <strong style="color:#dc2626;">STOCK: <%= s.Size %></strong>
+                                <br><small style="color:#888;">Brand: <%= s.Brand || 'N/A' %> | Category: <%= s.Category || 'N/A' %></small>
+                            </li>
+                        <% }); %>
+                    </ul>
+                <% } else { %>
+                    <p style="color:#10b981; font-weight:600;">✅ All items in stock!</p>
+                <% } %>
+            </div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">⚠️ Low Stock Alerts</h2>
+                <% if (lowStock && lowStock.length > 0) { %>
+                    <ul style="list-style:none; padding:0;">
+                        <% lowStock.forEach(function(s){ %>
+                            <li style="margin-bottom:12px; font-size:16px; font-weight:600;">
+                                <span style="color:var(--danger);"><%= s.ItemName %></span> (ID: <%= s.ItemID %>) — <strong><%= s.Size %></strong> left
+                            </li>
+                        <% }); %>
+                    </ul>
+                <% } else { %>
+                    <p style="color:#888;">No low stock items</p>
+                <% } %>
+            </div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">🚀 Fast-Moving Inventory</h2>
+                <% if (fastMoving && fastMoving.length > 0) { %>
+                    <ul style="list-style:none; padding:0;">
+                        <% fastMoving.forEach(function(item, index){ %>
+                            <li style="margin-bottom:12px; font-size:15px;">
+                                <span style="color:#10b981; font-weight:700;"><%= index + 1 %>. <%= item._id %></span> — 
+                                <strong><%= item.totalQuantitySold %> units</strong> in <%= item.totalOrders %> orders
+                                <small style="color:#888;">(₹<%= item.totalRevenue.toFixed(0) %> revenue)</small>
+                            </li>
+                        <% }); %>
+                    </ul>
+                <% } else { %>
+                    <p style="color:#888;">No fast-moving items in this period</p>
+                <% } %>
+            </div>
+            <div style="background:white; border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                <h2 style="font-size:20px; font-weight:700; margin-bottom:16px;">🐌 Slow-Moving Inventory</h2>
+                <% if (slowMoving && slowMoving.length > 0) { %>
+                    <ul style="list-style:none; padding:0;">
+                        <% slowMoving.forEach(function(item){ %>
+                            <li style="margin-bottom:12px; font-size:15px;">
+                                <span style="color:#f59e0b; font-weight:600;">ID: <%= item._id %></span> — 
+                                Only <strong><%= item.totalSold %> units</strong> sold
+                                <% if (item.lastSoldDate) { %>
+                                    <small style="color:#888;">(Last: <%= new Date(item.lastSoldDate).toLocaleDateString() %>)</small>
+                                <% } %>
+                            </li>
+                        <% }); %>
+                    </ul>
+                <% } else { %>
+                    <p style="color:#888;">No slow-moving data available</p>
+                <% } %>
             </div>
         </div>
     </div>

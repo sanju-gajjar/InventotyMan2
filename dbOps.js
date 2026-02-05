@@ -125,6 +125,46 @@ exports.getHomePage = function (req,callback) {
           { $limit: 10 }
         ];
 
+        // OUT OF STOCK alerts (CRITICAL - Size = 0)
+        const outOfStockPipeline = [
+          { $match: { Size: { $lte: 0 } } },
+          { $project: { ItemID: 1, ItemName: 1, Category: 1, Brand: 1, Size: 1 } },
+          { $sort: { ItemName: 1 } },
+          { $limit: 20 }
+        ];
+
+        // FAST-MOVING inventory (sold frequently in the period)
+        const fastMovingPipeline = [
+          ...baseMatch,
+          {
+            $group: {
+              _id: "$ItemName",
+              totalQuantitySold: { $sum: "$Size" },
+              totalOrders: { $sum: 1 },
+              totalRevenue: { $sum: "$Amount" },
+              avgOrderSize: { $avg: "$Size" }
+            }
+          },
+          { $match: { totalOrders: { $gte: 3 } } }, // At least 3 orders in period
+          { $sort: { totalQuantitySold: -1 } },
+          { $limit: 10 }
+        ];
+
+        // SLOW-MOVING inventory (rarely sold or never sold in period)
+        // First get all items that were sold
+        const soldItemsPipeline = [
+          ...baseMatch,
+          {
+            $group: {
+              _id: "$ItemID",
+              totalSold: { $sum: "$Size" },
+              lastSoldDate: { $max: "$BillDateObj" }
+            }
+          },
+          { $sort: { totalSold: 1 } },
+          { $limit: 10 }
+        ];
+
         // Run all aggregations in parallel
         Promise.all([
           ordersCollection.aggregate(salesTrendPipeline).toArray(),
@@ -132,10 +172,13 @@ exports.getHomePage = function (req,callback) {
           ordersCollection.aggregate(topProductsPipeline).toArray(),
           ordersCollection.aggregate(topCustomersPipeline).toArray(),
           stockCollection.aggregate(lowStockPipeline).toArray(),
+          stockCollection.aggregate(outOfStockPipeline).toArray(),
+          ordersCollection.aggregate(fastMovingPipeline).toArray(),
+          ordersCollection.aggregate(soldItemsPipeline).toArray(),
           // Existing stats
           ordersCollection.aggregate([...baseMatch, { $group: { _id: '_id', TotalItemsOrdered: { $sum: "$Amount" } } }]).toArray(),
           ordersCollection.aggregate([...baseMatch]).toArray(),
-        ]).then(([salesTrend, ordersTrend, topProducts, topCustomers, lowStock, total_sales, resultCount]) => {
+        ]).then(([salesTrend, ordersTrend, topProducts, topCustomers, lowStock, outOfStock, fastMoving, slowMoving, total_sales, resultCount]) => {
           var returnData = {
             user: getUserRole(req),
             total_sales: total_sales,
@@ -149,7 +192,10 @@ exports.getHomePage = function (req,callback) {
             ordersTrend,
             topProducts,
             topCustomers,
-            lowStock
+            lowStock,
+            outOfStock,  // CRITICAL ALERT
+            fastMoving,  // Fast-moving inventory
+            slowMoving   // Slow-moving inventory
           };
           callback(null, returnData);
         }).catch(err => {

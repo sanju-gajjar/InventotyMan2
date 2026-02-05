@@ -138,10 +138,65 @@ exports.submitBill = function (req, callback) {
     const date_format = new Date();
     const transaction_date = date_format.getDate() + '/' + (parseInt(date_format.getMonth() + 1)).toString() + '/' + date_format.getFullYear();
     const transaction_time = date_format.getHours() + ':' + date_format.getMinutes() + ':' + date_format.getSeconds();
-    generateReceiptNumber().then(transaction_id => {
+    
+    generateReceiptNumber().then(async transaction_id => {
+      // CRITICAL: Validate stock availability BEFORE creating bill
+      const stockValidationPromises = request1.map(async item => {
+        if (!item.id) return { valid: true };
+        
+        const stockItem = await stockCollection.findOne({ ItemID: item.id });
+        const requestedQty = parseInt(item.unit) || 0;
+        
+        if (!stockItem) {
+          return { 
+            valid: false, 
+            itemId: item.id, 
+            itemName: item.product,
+            reason: 'Item not found in stock' 
+          };
+        }
+        
+        if (stockItem.Size < requestedQty) {
+          return { 
+            valid: false, 
+            itemId: item.id, 
+            itemName: item.product,
+            available: stockItem.Size,
+            requested: requestedQty,
+            reason: `Insufficient stock: ${stockItem.Size} available, ${requestedQty} requested` 
+          };
+        }
+        
+        return { valid: true, itemId: item.id };
+      });
+      
+      const validationResults = await Promise.all(stockValidationPromises);
+      const invalidItems = validationResults.filter(r => !r.valid);
+      
+      if (invalidItems.length > 0) {
+        console.error('❌ Stock validation failed:', invalidItems);
+        const errorMsg = invalidItems.map(item => 
+          `${item.itemName} (${item.itemId}): ${item.reason}`
+        ).join('; ');
+        return callback(new Error(`STOCK VALIDATION FAILED: ${errorMsg}`), null);
+      }
+      
+      console.log('✅ Stock validation passed for all items');
+      
       // Insert data into orders collection
       var billAdd = [];
       request1.forEach(ddd => {
+        const quantity = parseInt(ddd.unit);
+        const price = parseFloat(ddd.price);
+        const discount = parseFloat(ddd.discount) || 0;
+        const gstPercent = parseFloat(ddd.gst) || 0;
+        
+        // Calculate: (price × qty) - discount + ((price × qty - discount) × gst%)
+        const subtotal = price * quantity;
+        const afterDiscount = subtotal - discount;
+        const gstAmount = (afterDiscount * gstPercent) / 100;
+        const finalAmount = afterDiscount + gstAmount;
+        
         billAdd.push({
           UserBy: getUserRole(req),
           ItemID: ddd.id,
@@ -149,11 +204,12 @@ exports.submitBill = function (req, callback) {
           Category: ddd.category,
           Brand: ddd.brand,
           ItemName: ddd.product,
-          Size: parseInt(ddd.unit),
-          GST: parseFloat(ddd.gst),
-          Discount: parseFloat(ddd.discount),
-          Amount: parseFloat(ddd.amount),
-          Price: parseFloat(ddd.price),
+          Quantity: quantity,
+          SerialNumber: ddd.serialNo || '', // Capture serial number (comma-separated)
+          GST: gstPercent,
+          Discount: discount,
+          Amount: finalAmount,
+          Price: price,
           CustomerPhone: PhoneNumber,
           CustomerEmail: Email,
           BillDate: TodayDate,
@@ -165,37 +221,47 @@ exports.submitBill = function (req, callback) {
           TYear: parseInt(date_format.getFullYear())
         });
       });
-      ordersCollection.insertMany(billAdd, (err, result) => {
+      ordersCollection.insertMany(billAdd, async (err, result) => {
         if (!err) {
-          billAdd.forEach(item => {
-            const { ItemID, Size } = item;
-
-            stockCollection.updateOne(
-              {
-                ItemID
-              },
-              {
-                $inc: {
-                  Size: -Size
-                }
-              },
-              (err, result) => {
-                if (err) {
-                  console.log("Error updating product:", err);
-                } else {
-                  console.log(
-                    `Product with ID ${ItemID} updated successfully`
-                  );
-                }
+          // IMPROVED: Use Promise.all for atomic-like stock updates with error handling
+          const stockUpdatePromises = billAdd.map(item => {
+            const { ItemID, Quantity } = item;
+            
+            return stockCollection.updateOne(
+              { ItemID },
+              { $inc: { Size: -Quantity } }  // Stock collection uses Size field for quantity
+            ).then((updateResult) => {
+              if (updateResult.matchedCount === 0) {
+                console.warn(`⚠️ Warning: ItemID ${ItemID} not found in stock collection`);
+                return { success: false, itemID: ItemID, reason: 'not_found' };
               }
-            );
+              console.log(`✅ Stock updated: ${ItemID} (-${Quantity} units)`);
+              return { success: true, itemID: ItemID };
+            }).catch(updateErr => {
+              console.error(`❌ Error updating stock for ${ItemID}:`, updateErr);
+              return { success: false, itemID: ItemID, error: updateErr };
+            });
           });
-          // if (req.body.sendMail == "on") {
-          //     sendMail(billAdd, billAdd[0].CustomerEmail).catch(console.error);
-          // }
-          callback(null, null);
+
+          try {
+            // Wait for all stock updates to complete
+            const stockResults = await Promise.all(stockUpdatePromises);
+            
+            // Check if any updates failed
+            const failedUpdates = stockResults.filter(r => !r.success);
+            if (failedUpdates.length > 0) {
+              console.error('⚠️ Some stock updates failed:', failedUpdates);
+              // You could implement rollback logic here if needed
+            }
+            
+            callback(null, { transactionId: billAdd[0].TransactionID, stockUpdateResults: stockResults });
+          } catch (promiseErr) {
+            console.error('❌ Critical error during stock updates:', promiseErr);
+            callback(promiseErr, null);
+          }
         } else {
-          console.log(err);
+          console.error('❌ Error inserting orders:', err);
+          callback(err, null);
         }
       });
     });

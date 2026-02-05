@@ -123,20 +123,26 @@
 
             invoiceData.orders.forEach((order, index) => {
                 const disc = order.Discount == null ? 0.0 : parseFloat(order.Discount);
-                const qty = order.Size || 1;
+                const qty = order.Quantity || order.Size || 1;  // Support both fields during transition
                 const unitPrice = parseFloat(order.Price) || 0;
                 const gstPercent = parseFloat(order.GST) || 0;
                 
-                // Calculate correct amount: (price × qty) - discount + GST
+                // Calculate correct amount: (price × qty) - discount + ((price × qty - discount) × gst%)
                 const subtotal = unitPrice * qty;
                 const afterDiscount = subtotal - disc;
                 const gstAmount = (afterDiscount * gstPercent) / 100;
                 const lineAmount = afterDiscount + gstAmount;
                 
+                // Build description with serial numbers if available
+                let description = order.ItemName + '(' + order.Category + ')' + '-' + order.Brand;
+                if (order.SerialNumber && order.SerialNumber.trim()) {
+                    description += ' [S.No: ' + order.SerialNumber + ']';
+                }
+                
                 const item_obj = {
                     "noitem": (index + 1),
                     "quantity": qty,
-                    "description": order.ItemName + '(' + order.Category + ')' + '-' + order.Brand,
+                    "description": description,
                     "hsn": "",
                     "tax-rate": 0,
                     "price": lineAmount.toFixed(2),

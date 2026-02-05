@@ -416,7 +416,7 @@ app.post('/fetchItemsByBrandCategory', checkAuthenticated, async (req, res) => {
     }
 });
 
-// Delete order by _id
+// Delete order by _id - WITH STOCK RESTORATION
 app.post('/deleteorder', checkAuthenticated, async (req, res) => {
     try {
         const orderId = req.body.orderId;
@@ -424,12 +424,45 @@ app.post('/deleteorder', checkAuthenticated, async (req, res) => {
             return res.status(400).send('Order ID required');
         }
         const ordersCollection = db.collection('orders');
+        const stockCollection = db.collection('stocks');
         const ObjectID = require('mongodb').ObjectID;
-        await ordersCollection.deleteMany({ _id: new ObjectID(orderId) });
+        
+        // CRITICAL: Fetch order details before deletion to restore stock
+        const orderToDelete = await ordersCollection.findOne({ _id: new ObjectID(orderId) });
+        
+        if (!orderToDelete) {
+            return res.status(404).send('Order not found');
+        }
+        
+        // Get all items in the same transaction (bill)
+        const allOrderItems = await ordersCollection.find({ 
+            TransactionID: orderToDelete.TransactionID 
+        }).toArray();
+        
+        // Restore stock for each item
+        const stockRestorePromises = allOrderItems.map(item => {
+            if (item.ItemID && item.Quantity) {
+                return stockCollection.updateOne(
+                    { ItemID: item.ItemID },
+                    { $inc: { Size: item.Quantity } } // Stock uses Size field, restore the quantity
+                ).then(() => {
+                    console.log(`✅ Stock restored: ${item.ItemName} (+${item.Quantity})`);
+                }).catch(err => {
+                    console.error(`❌ Failed to restore stock for ${item.ItemName}:`, err);
+                });
+            }
+        });
+        
+        await Promise.all(stockRestorePromises);
+        
+        // Delete all orders with the same TransactionID (entire bill)
+        await ordersCollection.deleteMany({ TransactionID: orderToDelete.TransactionID });
+        
+        console.log(`✅ Order ${orderToDelete.TransactionID} deleted and stock restored`);
         res.redirect('/orders');
     } catch (err) {
         console.error('Error deleting order:', err);
-        res.status(500).send('Failed to delete order');
+        res.status(500).send('Failed to delete order: ' + err.message);
     }
 });
 app.get('/billing', checkAuthenticated, (req, res) => {
@@ -531,7 +564,15 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
 
             const quantity = parseFloat(req.body[`unit${i}`]) || 0;
             const price = parseFloat(req.body[`price${i}`]) || 0;
-            const amount = parseFloat(req.body[`amount${i}`]) || 0;
+            const discount = parseFloat(req.body[`discount${i}`]) || 0;
+            const gstPercent = parseFloat(req.body[`gst${i}`]) || 0;
+            const serialNumber = req.body[`serialNo${i}`] || '';
+
+            // Calculate amount: (price × qty) - discount + ((price × qty - discount) × gst%)
+            const subtotal = price * quantity;
+            const afterDiscount = subtotal - discount;
+            const gstAmount = (afterDiscount * gstPercent) / 100;
+            const finalAmount = afterDiscount + gstAmount;
 
             products.push({
                 UserBy: userRole,
@@ -540,12 +581,12 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
                 ItemName: itemName,
                 Category: category,
                 Brand: brand,
-                Size: req.body[`hsb${i}`] || '',
                 Quantity: quantity,
+                SerialNumber: serialNumber,
                 Price: price,
-                Amount: amount,
-                Discount: parseFloat(req.body[`discount${i}`]) || 0,
-                GST: parseFloat(req.body[`gst${i}`]) || 0,
+                Amount: finalAmount,
+                Discount: discount,
+                GST: gstPercent,
                 OnlinePayment: onlinePayment,
                 BillDate: billDate,
                 TransactionDate: transactionDate,
@@ -737,8 +778,9 @@ app.get('/edititem', checkAuthenticated, (req, res) => {
 
     // });
 });
-app.post('/edititem', checkAuthenticated, (req, res) => {
+app.post('/edititem', checkAuthenticated, async (req, res) => {
         const ordersCollection = db.collection('orders');
+        const stockCollection = db.collection('stocks');
         const customerCollection = db.collection("customer");
 
         // Arrays for multiple items
@@ -749,66 +791,116 @@ app.post('/edititem', checkAuthenticated, (req, res) => {
         const categories = req.body["category[]"] || req.body.category;
         const brands = req.body["brand[]"] || req.body.brand;
         const sizes = req.body["size[]"] || req.body.size;
+        const serialNos = req.body["serialNo[]"] || req.body.serialNo;
         const prices = req.body["price[]"] || req.body.price;
         const discounts = req.body["discount[]"] || req.body.discount;
         const amounts = req.body["amount[]"] || req.body.amount;
         const transactionID = req.body.transactionID;
 
-        // Update all items
-        let updatePromises = [];
-        for (let i = 0; i < itemIDs.length; i++) {
-                const size = parseInt(sizes[i]) || 0;
+        try {
+            // CRITICAL: Fetch original order data to calculate stock adjustments
+            const originalOrders = await ordersCollection.find({ 
+                _id: { $in: _ids.map(id => new ObjectID(id)) } 
+            }).toArray();
+            
+            const originalOrdersMap = {};
+            originalOrders.forEach(order => {
+                originalOrdersMap[order._id.toString()] = order;
+            });
+
+            // Update all items and track stock changes
+            let updatePromises = [];
+            let stockAdjustments = {}; // Track net stock changes per ItemID
+            
+            for (let i = 0; i < itemIDs.length; i++) {
+                const quantity = parseInt(sizes[i]) || 0;  // sizes array actually contains quantities
                 const price = parseFloat(prices[i]) || 0;
                 const discount = parseFloat(discounts[i]) || 0;
-                // Use the amount calculated by the frontend (which includes discount)
-                const amount = parseFloat(amounts[i]) || ((price * size) - discount);
+                const gstPercent = parseFloat(req.body["gst[]"] ? req.body["gst[]"][i] : 0) || 0;
+                
+                // Recalculate amount: (price × qty) - discount + gst
+                const subtotal = price * quantity;
+                const afterDiscount = subtotal - discount;
+                const gstAmount = (afterDiscount * gstPercent) / 100;
+                const amount = afterDiscount + gstAmount;
+                
+                const orderId = _ids[i].toString();
+                const itemID = itemIDs[i];
+                const serialNo = serialNos && serialNos[i] ? serialNos[i] : '';
+                
+                // Calculate stock adjustment
+                const originalOrder = originalOrdersMap[orderId];
+                if (originalOrder) {
+                    const oldQty = originalOrder.Quantity || originalOrder.Size || 0;  // Support both fields
+                    const qtyDiff = oldQty - quantity; // Positive = need to add back, Negative = need to deduct more
+                    
+                    if (itemID) {
+                        stockAdjustments[itemID] = (stockAdjustments[itemID] || 0) + qtyDiff;
+                    }
+                }
                 
                 updatePromises.push(
-                        ordersCollection.updateOne(
-                                { _id: new ObjectID(_ids[i]) },
-                                {
-                                        $set: {
-                                                ItemID: itemIDs[i],
-                                                ItemName: itemNames[i],
-                                                Category: categories[i],
-                                                Brand: brands[i],
-                                                BillDate: billDates[i],
-                                                Size: size,
-                                                Price: price,
-                                                Discount: discount,
-                                                Amount: amount
-                                        }
-                                }
-                        )
+                    ordersCollection.updateOne(
+                        { _id: new ObjectID(_ids[i]) },
+                        {
+                            $set: {
+                                ItemID: itemIDs[i],
+                                ItemName: itemNames[i],
+                                Category: categories[i],
+                                Brand: brands[i],
+                                BillDate: billDates[i],
+                                Quantity: quantity,
+                                SerialNumber: serialNo,
+                                Price: price,
+                                Discount: discount,
+                                GST: gstPercent,
+                                Amount: amount
+                            }
+                        }
+                    )
                 );
+            }
+
+            // Apply stock adjustments
+            const stockPromises = Object.keys(stockAdjustments).map(itemID => {
+                const adjustment = stockAdjustments[itemID];
+                if (adjustment !== 0) {
+                    return stockCollection.updateOne(
+                        { ItemID: itemID },
+                        { $inc: { Size: adjustment } }
+                    ).then(() => {
+                        console.log(`✅ Stock adjusted for ${itemID}: ${adjustment > 0 ? '+' : ''}${adjustment}`);
+                    }).catch(err => {
+                        console.error(`❌ Failed to adjust stock for ${itemID}:`, err);
+                    });
+                }
+            });
+
+            // Update customer info
+            const customer_id = req.body.customer_id;
+            const customerPhone = req.body.customerPhone;
+            const customerEmail = req.body.customerEmail;
+            const customerName = req.body.customerName;
+
+            await Promise.all([...updatePromises, ...stockPromises]);
+            
+            await customerCollection.updateOne(
+                { _id: new ObjectID(customer_id) },
+                {
+                    $set: {
+                        PhoneNumber: customerPhone,
+                        Email: customerEmail,
+                        CustomerName: customerName
+                    }
+                }
+            );
+            
+            console.log(`✅ Order ${transactionID} updated with stock adjustments`);
+            res.redirect("/orders");
+        } catch (err) {
+            console.error("Error updating order or customer:", err);
+            res.status(500).send("Internal Server Error: " + err.message);
         }
-
-        // Update customer info
-        const customer_id = req.body.customer_id;
-        const customerPhone = req.body.customerPhone;
-        const customerEmail = req.body.customerEmail;
-        const customerName = req.body.customerName;
-
-        Promise.all(updatePromises)
-                .then(() => {
-                        return customerCollection.updateOne(
-                                { _id: new ObjectID(customer_id) },
-                                {
-                                        $set: {
-                                                PhoneNumber: customerPhone,
-                                                Email: customerEmail,
-                                                CustomerName: customerName
-                                        }
-                                }
-                        );
-                })
-                .then(() => {
-                        res.redirect("/orders");
-                })
-                .catch((err) => {
-                        console.error("Error updating order or customer:", err);
-                        res.status(500).send("Internal Server Error");
-                });
 });
 app.get('/orders_query', checkAuthenticated, (req, res) => {
     res.redirect('/orders');

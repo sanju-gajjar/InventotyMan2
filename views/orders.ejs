@@ -313,10 +313,17 @@
                   if (isNaN(disc)) {
                     disc = 0.0;
                   }
+                  
+                  // Build description with serial numbers
+                  let description = data.rows[i].ItemName + '(' + data.rows[i].Category + ')' + '-' + data.rows[i].Brand;
+                  if (data.rows[i].SerialNumber && data.rows[i].SerialNumber.trim()) {
+                    description += ' [S.No: ' + data.rows[i].SerialNumber + ']';
+                  }
+                  
                   let item_obj = {
                     "noitem": (i + 1),
-                    "quantity": data.rows[i].Size,
-                    "description": data.rows[i].ItemName + '(' + data.rows[i].Category + ')' + '-' + data.rows[i].Brand,
+                    "quantity": data.rows[i].Quantity || data.rows[i].Size || 1,
+                    "description": description,
                     "tax-rate": 0,
                     "price": parseFloat(data.rows[i].Amount).toFixed(2),
                     "salePrice": parseFloat(data.rows[i].Price).toFixed(2),

@@ -99,16 +99,24 @@
                     <input type="text" name="brand[]" class="form-input" value="<%= item.Brand %>" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Size</label>
-                    <input type="text" name="size[]" class="form-input" value="<%= item.Size %>" required>
+                    <label class="form-label">Quantity</label>
+                    <input type="number" name="size[]" class="form-input size-input" value="<%= item.Quantity || item.Size %>" required onchange="calculateAmount(this)">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Price</label>
+                    <label class="form-label">Serial Number(s)</label>
+                    <input type="text" name="serialNo[]" class="form-input" value="<%= item.SerialNumber || '' %>" placeholder="S.No comma separated (e.g. SN001, SN002)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Price (per unit)</label>
                     <input type="number" step="0.01" name="price[]" class="form-input price-input" value="<%= item.Price %>" required onchange="calculateAmount(this)">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Discount</label>
                     <input type="number" step="0.01" name="discount[]" class="form-input discount-input" value="<%= item.Discount || 0 %>" onchange="calculateAmount(this)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">GST %</label>
+                    <input type="number" step="0.01" name="gst[]" class="form-input gst-input" value="<%= item.GST || 0 %>" onchange="calculateAmount(this)">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Amount</label>
@@ -142,19 +150,26 @@
 function calculateAmount(inputElem) {
     // Find the parent form-grid div
     const formGrid = inputElem.closest('.form-grid');
-    // Find size, price, discount, and amount inputs in this grid
+    // Find size(qty), price, discount, GST, and amount inputs in this grid
     const sizeInput = formGrid.querySelector('input[name="size[]"]');
     const priceInput = formGrid.querySelector('input[name="price[]"]');
     const discountInput = formGrid.querySelector('input[name="discount[]"]');
+    const gstInput = formGrid.querySelector('input[name="gst[]"]');
     const amountInput = formGrid.querySelector('input[name="amount[]"]');
+    
     if (sizeInput && priceInput && amountInput) {
-        let size = parseFloat(sizeInput.value);
-        if (!size || size <= 0) size = 1;
+        const qty = parseFloat(sizeInput.value) || 0;
         const price = parseFloat(priceInput.value) || 0;
-        const discount = discountInput ? (parseFloat(discountInput.value) || 0) : 0;
-        let amount = size * price;
-        amount = amount - discount;
-        amountInput.value = isNaN(amount) ? '0.00' : amount.toFixed(2);
+        const discount = parseFloat(discountInput.value) || 0;
+        const gstPercent = parseFloat(gstInput.value) || 0;
+        
+        // Calculate: (price × qty) - discount + ((price × qty - discount) × gst%)
+        const subtotal = price * qty;
+        const afterDiscount = subtotal - discount;
+        const gstAmount = (afterDiscount * gstPercent) / 100;
+        const total = afterDiscount + gstAmount;
+        
+        amountInput.value = total.toFixed(2);
     }
 }
 
