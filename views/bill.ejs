@@ -1,5 +1,12 @@
 <%- include('header', { pageTitle: 'Billing' }) %>
 
+<%
+    const businessType = (typeof tenant !== 'undefined' && tenant && tenant.config) ? tenant.businessType : 'mobile';
+    const isMobile = businessType === 'mobile';
+    const isRestaurant = businessType === 'restaurant';
+    const isClothing = businessType === 'clothing';
+%>
+
 <main class="app-main">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.min.js"></script>
@@ -89,30 +96,27 @@
         }
 
         .table-responsive {
-            overflow: visible;
+            overflow-x: auto;
+            overflow-y: visible;
             margin-top: 20px;
+            -webkit-overflow-scrolling: touch;
         }
 
         .product-table {
             width: 100%;
             border-collapse: collapse;
-            table-layout: fixed;
+            table-layout: auto;
+            min-width: 1200px;
         }
 
-        .product-table th:nth-child(1) { width: 40px; } /* Sr */
-        .product-table th:nth-child(2) { width: 100px; } /* Brand */
-        .product-table th:nth-child(3) { width: 100px; } /* Category */
-        .product-table th:nth-child(4) { width: 50px; } /* Search */
-        .product-table th:nth-child(5) { width: 90px; } /* Item ID */
-        .product-table th:nth-child(6) { width: 150px; } /* Item Name */
-        .product-table th:nth-child(7) { width: 70px; } /* Size/Model */
-        .product-table th:nth-child(8) { width: 130px; } /* Serial No */
-        .product-table th:nth-child(9) { width: 80px; } /* Price */
-        .product-table th:nth-child(10) { width: 50px; } /* Qty */
-        .product-table th:nth-child(11) { width: 70px; } /* Discount */
-        .product-table th:nth-child(12) { width: 55px; } /* GST % */
-        .product-table th:nth-child(13) { width: 90px; } /* Total */
-        .product-table th:nth-child(14) { width: 60px; } /* Action */
+        /* Column width hints - browser will adjust based on content */
+        .product-table th {
+            white-space: nowrap;
+            min-width: 80px;
+        }
+        
+        .product-table th:first-child { min-width: 40px; max-width: 50px; } /* Sr */
+        .product-table th:last-child { min-width: 60px; max-width: 80px; } /* Action */
 
         .product-table thead {
             background: linear-gradient(135deg, var(--dark), var(--darker));
@@ -581,13 +585,16 @@
                         <thead>
                             <tr>
                                 <th>Sr.</th>
-                                <th>Brand</th>
+                                <% if (isMobile || isClothing) { %><th>Brand</th><% } %>
                                 <th>Category</th>
+                                <% if (isClothing) { %><th>Sub-Cat</th><% } %>
                                 <th>Find</th>
                                 <th>Item ID</th>
                                 <th>Product Name</th>
-                                <th>Size</th>
-                                <th>Serial No.</th>
+                                <% if (isRestaurant) { %><th>Unit</th><% } else { %><th>Size</th><% } %>
+                                <% if (isMobile) { %><th>Serial No.</th><% } %>
+                                <% if (isClothing) { %><th>Cloth Size</th><th>Color</th><% } %>
+                                <% if (isRestaurant) { %><th>Table No.</th><th>Order Type</th><% } %>
                                 <th>Price (₹)</th>
                                 <th>Qty</th>
                                 <th>Disc (₹)</th>
@@ -912,31 +919,78 @@
             const tbody = document.getElementById('productTableBody');
             const row = document.createElement('tr');
             row.id = `row${rowCounter}`;
-            row.innerHTML = `
-                <td style="text-align: center; font-weight: 700;">${rowCounter}</td>
-                <td style="position: relative;"><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="Brand" class="brand-input" data-row="${rowCounter}"></td>
-                <td style="position: relative;"><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="Category" class="category-input" data-row="${rowCounter}"></td>
-                <td style="text-align: center;">
-                    <button type="button" class="btn-icon primary" onclick="searchItems(${rowCounter})" title="Search Items">
-                        <i class="material-icons">search</i>
-                    </button>
-                </td>
-                <td><input type="text" name="id${rowCounter}" id="itemid${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Item ID (optional)"></td>
-                <td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="Product Name" required></td>
-                <td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Size"></td>
-                <td><input type="text" name="serialNo${rowCounter}" id="serialNo${rowCounter}" placeholder="S.No (comma separated)" title="Enter serial numbers separated by commas, e.g. SN001, SN002"></td>
-                <td><input type="number" name="price${rowCounter}" id="price${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0.00" step="0.01"></td>
-                <td><input type="number" name="unit${rowCounter}" id="quantity${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="1" min="1" value="1" required></td>
-                <td><input type="number" name="discount${rowCounter}" id="discount${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0" min="0" value="0" step="0.01"></td>
-                <td><input type="number" name="gst${rowCounter}" id="gst${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0" min="0" max="100" value="0" step="0.01"></td>
-                <td style="text-align: center; font-weight: 700;">₹<span id="total${rowCounter}">0.00</span></td>
-                <td style="text-align: center;">
-                    <button type="button" class="btn-icon danger" onclick="deleteRow(${rowCounter})">
-                        <i class="material-icons">delete</i>
-                    </button>
-                </td>
-                <input type="hidden" name="amount${rowCounter}" id="amount${rowCounter}" value="0">
-            `;
+            
+            // Build row HTML based on business type
+            let rowHTML = `<td style="text-align: center; font-weight: 700;">${rowCounter}</td>`;
+            
+            // Brand field (Mobile & Clothing only)
+            <% if (isMobile || isClothing) { %>
+            rowHTML += `<td style="position: relative;"><input type="text" name="brand${rowCounter}" id="brand${rowCounter}" placeholder="Brand" class="brand-input" data-row="${rowCounter}"></td>`;
+            <% } %>
+            
+            // Category field (all business types)
+            rowHTML += `<td style="position: relative;"><input type="text" name="category${rowCounter}" id="category${rowCounter}" placeholder="Category" class="category-input" data-row="${rowCounter}"></td>`;
+            
+            // Sub-Category (Clothing only)
+            <% if (isClothing) { %>
+            rowHTML += `<td><input type="text" name="subCategory${rowCounter}" id="subCategory${rowCounter}" placeholder="Sub-Category"></td>`;
+            <% } %>
+            
+            // Search button
+            rowHTML += `<td style="text-align: center;">
+                <button type="button" class="btn-icon primary" onclick="searchItems(${rowCounter})" title="Search Items">
+                    <i class="material-icons">search</i>
+                </button>
+            </td>`;
+            
+            // Item ID and Name (all business types)
+            rowHTML += `<td><input type="text" name="id${rowCounter}" id="itemid${rowCounter}" class="item-id" data-row="${rowCounter}" placeholder="Item ID (optional)"></td>`;
+            rowHTML += `<td><input type="text" name="product${rowCounter}" id="itemname${rowCounter}" placeholder="Product Name" required></td>`;
+            
+            // Unit field (Restaurant) or Size field (Mobile & Clothing)
+            <% if (isRestaurant) { %>
+            rowHTML += `<td><input type="text" name="unit${rowCounter}" id="unit${rowCounter}" placeholder="kg/liter/pc"></td>`;
+            <% } else { %>
+            rowHTML += `<td><input type="text" name="hsb${rowCounter}" id="size${rowCounter}" placeholder="Size"></td>`;
+            <% } %>
+            
+            // Serial Number (Mobile only)
+            <% if (isMobile) { %>
+            rowHTML += `<td><input type="text" name="serialNo${rowCounter}" id="serialNo${rowCounter}" placeholder="S.No (comma separated)" title="Enter serial numbers separated by commas, e.g. SN001, SN002"></td>`;
+            <% } %>
+            
+            // Cloth Size & Color (Clothing only)
+            <% if (isClothing) { %>
+            rowHTML += `<td><input type="text" name="clothSize${rowCounter}" id="clothSize${rowCounter}" placeholder="S,M,L,XL"></td>`;
+            rowHTML += `<td><input type="text" name="color${rowCounter}" id="color${rowCounter}" placeholder="Color"></td>`;
+            <% } %>
+            
+            // Table No & Order Type (Restaurant only)
+            <% if (isRestaurant) { %>
+            rowHTML += `<td><input type="text" name="tableNo${rowCounter}" id="tableNo${rowCounter}" placeholder="Table #"></td>`;
+            rowHTML += `<td><select name="orderType${rowCounter}" id="orderType${rowCounter}" class="form-input">
+                <option value="Dine-in">Dine-in</option>
+                <option value="Takeaway">Takeaway</option>
+                <option value="Delivery">Delivery</option>
+            </select></td>`;
+            <% } %>
+            
+            // Price, Quantity, Discount, GST, Amount (all business types)
+            rowHTML += `<td><input type="number" name="price${rowCounter}" id="price${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0.00" step="0.01"></td>`;
+            rowHTML += `<td><input type="number" name="quantity${rowCounter}" id="quantity${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="1" min="1" value="1" required></td>`;
+            rowHTML += `<td><input type="number" name="discount${rowCounter}" id="discount${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0" min="0" value="0" step="0.01"></td>`;
+            rowHTML += `<td><input type="number" name="gst${rowCounter}" id="gst${rowCounter}" class="calc-input" data-row="${rowCounter}" placeholder="0" min="0" max="100" value="0" step="0.01"></td>`;
+            rowHTML += `<td style="text-align: center; font-weight: 700;">₹<span id="total${rowCounter}">0.00</span></td>`;
+            
+            // Delete button
+            rowHTML += `<td style="text-align: center;">
+                <button type="button" class="btn-icon danger" onclick="deleteRow(${rowCounter})">
+                    <i class="material-icons">delete</i>
+                </button>
+            </td>`;
+            rowHTML += `<input type="hidden" name="amount${rowCounter}" id="amount${rowCounter}" value="0">`;
+            
+            row.innerHTML = rowHTML;
             tbody.appendChild(row);
 
             // Add event listeners for calc inputs

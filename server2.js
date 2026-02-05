@@ -24,6 +24,9 @@ const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 const checkAuthenticated = require('./middleware/authenticateJWT');
+const { tenantMiddleware, optionalTenant } = require('./middleware/tenantMiddleware');
+const { connectToMongo, getDbFromRequest, getTenantDb, listDatabases } = require('./db/db');
+const { registerTenant, listTenants, getTenant } = require('./config/tenantRegistry');
 const app = express();
 
 // IMPORTANT: Set up middleware BEFORE defining routes
@@ -69,9 +72,10 @@ app.use(require('webpack-dev-middleware')(compiler, {
 
 // NOW define routes after middleware is set up
 // Endpoint to download invoice PDF - generates HTML page that auto-generates PDF from DB
-app.get('/download-invoice/:transactionId', async (req, res) => {
+app.get('/download-invoice/:transactionId', tenantMiddleware, async (req, res) => {
     try {
         const transactionId = decodeURIComponent(req.params.transactionId);
+        const db = getDbFromRequest(req);
         const ordersCollection = db.collection('orders');
         
         const orders = await ordersCollection.find({ TransactionID: transactionId }).toArray();
@@ -99,8 +103,9 @@ app.get('/download-invoice/:transactionId', async (req, res) => {
 });
 
 // API endpoints for autocomplete
-app.get('/api/categories', checkAuthenticated, async (req, res) => {
+app.get('/api/categories', checkAuthenticated, tenantMiddleware, async (req, res) => {
     try {
+        const db = getDbFromRequest(req);
         const categoriesCollection = db.collection('categories');
         const categories = await categoriesCollection.find().toArray();
         res.json(categories.map(c => c.Category));
@@ -109,8 +114,9 @@ app.get('/api/categories', checkAuthenticated, async (req, res) => {
     }
 });
 
-app.get('/api/brands', checkAuthenticated, async (req, res) => {
+app.get('/api/brands', checkAuthenticated, tenantMiddleware, async (req, res) => {
     try {
+        const db = getDbFromRequest(req);
         const brandsCollection = db.collection('brands');
         const brands = await brandsCollection.find().toArray();
         res.json(brands.map(b => b.Brand));
@@ -142,7 +148,7 @@ const {
     fetchOrderItem
 } = require('./orderOps.js');
 const secretKey = process.env.SESSION_SECRET;
-let db;
+
 function getUserRole(req) {
     const user = req.cookies.user;
     const role = req.cookies.role;
@@ -155,15 +161,6 @@ function renderTml(filename, tmlData) {
     const template = fs.readFileSync(filename, 'utf-8');
     const compiledTemplate = ejs.compile(template);
     return compiledTemplate(tmlData);
-}
-const uri =process.env.mongo_host;
-const dbName = 'inventoryman';
-async function connectToMongo() {
-    const client = new MongoClient(uri);
-    await client.connect();
-    db = client.db(dbName);
-    global.db = db; // Make db available globally for other modules
-    console.log('Db connected');
 }
 
 // app.get('*', (req, res) => {
@@ -182,7 +179,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.get('/login', (req, res) => {
+app.get('/login', optionalTenant, (req, res) => {
     let data = {
         messages: {
             error: null
@@ -191,20 +188,21 @@ app.get('/login', (req, res) => {
    // res.send("Please contact service provider to complete the payment bill for resume the instance");
     res.send(renderTml('views/login.ejs', data))
 });
-app.get('/register', (req, res) => {
+app.get('/register', optionalTenant, (req, res) => {
     res.render('register.ejs', {
         messages: {
             error: null
         }
     })
 });
-app.post('/register', async (req, res) => {
+app.post('/register', optionalTenant, async (req, res) => {
     const {
         email,
         password,
         role
     } = req.body;
     try {
+        const db = getDbFromRequest(req);
         const existingUser = await db.collection('users').findOne({
             username: email
         });
@@ -240,12 +238,13 @@ app.post('/register', async (req, res) => {
         });
     }
 });
-app.post('/login', async (req, res) => {
+app.post('/login', optionalTenant, async (req, res) => {
     const {
         email,
         password
     } = req.body;
     try {
+        const db = getDbFromRequest(req);
         const user = await db.collection('users').findOne({
             username: email
         });
@@ -282,38 +281,125 @@ app.post('/logout', (req, res) => {
     res.clearCookie('token');
     res.redirect('/login');
 });
-app.get('/', checkAuthenticated, (req, res) => {
+
+// ========== TENANT MANAGEMENT ENDPOINTS ==========
+// Admin endpoint to register new tenant
+app.post('/admin/register-tenant', checkAuthenticated, async (req, res) => {
+    try {
+        const { name, businessType, domain } = req.body;
+        
+        if (!name || !businessType) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Tenant name and business type are required' 
+            });
+        }
+
+        // Register tenant
+        const newTenant = registerTenant({
+            name,
+            businessType,
+            domain: domain || name.toLowerCase().replace(/\s+/g, '_')
+        });
+
+        console.log(`✅ New tenant registered: ${newTenant.name} (${newTenant.dbName})`);
+
+        res.status(201).json({
+            success: true,
+            message: 'Tenant registered successfully',
+            tenant: {
+                id: newTenant.id,
+                name: newTenant.name,
+                businessType: newTenant.businessType,
+                dbName: newTenant.dbName,
+                domain: newTenant.domain
+            }
+        });
+    } catch (error) {
+        console.error('Error registering tenant:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message || 'Failed to register tenant' 
+        });
+    }
+});
+
+// Admin endpoint to list all tenants
+app.get('/admin/tenants', checkAuthenticated, (req, res) => {
+    try {
+        const tenants = listTenants();
+        res.json({
+            success: true,
+            tenants: tenants.map(t => ({
+                id: t.id,
+                name: t.name,
+                businessType: t.businessType,
+                dbName: t.dbName,
+                domain: t.domain,
+                status: t.status,
+                createdAt: t.createdAt
+            }))
+        });
+    } catch (error) {
+        console.error('Error listing tenants:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to list tenants' 
+        });
+    }
+});
+
+// Admin endpoint to list all databases (debugging)
+app.get('/admin/databases', checkAuthenticated, async (req, res) => {
+    try {
+        const databases = await listDatabases();
+        res.json({
+            success: true,
+            databases
+        });
+    } catch (error) {
+        console.error('Error listing databases:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to list databases' 
+        });
+    }
+});
+
+// =================================================
+
+app.get('/', checkAuthenticated, tenantMiddleware, (req, res) => {
    getHomePage(req, (err, result) => {
        res.render('index.ejs', result);
    });
     //res.send("Please pay your oustanding to re-enable your service, please contact your service provider for bill and payment related queries.");
 });
-app.get('/orders', checkAuthenticated, (req, res) => {
+app.get('/orders', checkAuthenticated, tenantMiddleware, (req, res) => {
     getOrderPage(req, (err, result) => {
         res.render('orders.ejs', result);
     });
 });
-app.get('/viewbarcodepage', checkAuthenticated, (req, res) => {
+app.get('/viewbarcodepage', checkAuthenticated, tenantMiddleware, (req, res) => {
     getBarcodePage(req, (err, result) => {
         res.render('barcodeFilter.ejs', result);
     });
 });
-app.get('/viewstocks', checkAuthenticated, (req, res) => {
+app.get('/viewstocks', checkAuthenticated, tenantMiddleware, (req, res) => {
     getViewStocks(req, (err, result) => {
         res.render('viewstocks.ejs', result);
     });
 });
-app.post('/stocks_query', checkAuthenticated, (req, res) => {
+app.post('/stocks_query', checkAuthenticated, tenantMiddleware, (req, res) => {
     getStockQuery(req, (err, result) => {
         res.render('viewstocks.ejs', result);
     });
 });
-app.post('/barcode_query', checkAuthenticated, (req, res) => {
+app.post('/barcode_query', checkAuthenticated, tenantMiddleware, (req, res) => {
     getBarcodeQuery(req, (err, result) => {
         res.render('barcodeFilter.ejs', result);
     });
 });
-app.post('/fetchcustomer', checkAuthenticated, (req, res) => {
+app.post('/fetchcustomer', checkAuthenticated, tenantMiddleware, (req, res) => {
     getCustomer(req, (err, result) => {
         res.json(result);
     });
@@ -346,7 +432,7 @@ function generateBarcode(widthCm, heightCm, text, count, headerText, footerText)
     return Promise.all(generateBarcodePromises);
 }
 
-app.post('/barcodegen', checkAuthenticated, async (req, res) => {
+app.post('/barcodegen', checkAuthenticated, tenantMiddleware, async (req, res) => {
     const widthCm = 5.25;
     const heightCm = 2.0;
     const products = JSON.parse(req.body.allStocks);
@@ -374,20 +460,21 @@ app.post('/barcodegen', checkAuthenticated, async (req, res) => {
         });
 });
 
-app.post('/deletestock', checkAuthenticated, (req, res) => {
+app.post('/deletestock', checkAuthenticated, tenantMiddleware, (req, res) => {
     deleteStock(req, (err, result) => {
         res.redirect('/viewstocks');
     });
 })
-app.post('/fetchitem', checkAuthenticated, (req, res) => {
+app.post('/fetchitem', checkAuthenticated, tenantMiddleware, (req, res) => {
     fetStockItem(req, (err, result) => {
         res.json(result);
     });
 })
 
 // Fetch items by brand and category combination
-app.post('/fetchItemsByBrandCategory', checkAuthenticated, async (req, res) => {
+app.post('/fetchItemsByBrandCategory', checkAuthenticated, tenantMiddleware, async (req, res) => {
     try {
+        const db = getDbFromRequest(req);
         const stockCollection = db.collection('stocks');
         const { brand, category } = req.body;
         
@@ -417,12 +504,13 @@ app.post('/fetchItemsByBrandCategory', checkAuthenticated, async (req, res) => {
 });
 
 // Delete order by _id - WITH STOCK RESTORATION
-app.post('/deleteorder', checkAuthenticated, async (req, res) => {
+app.post('/deleteorder', checkAuthenticated, tenantMiddleware, async (req, res) => {
     try {
         const orderId = req.body.orderId;
         if (!orderId) {
             return res.status(400).send('Order ID required');
         }
+        const db = getDbFromRequest(req);
         const ordersCollection = db.collection('orders');
         const stockCollection = db.collection('stocks');
         const ObjectID = require('mongodb').ObjectID;
@@ -465,7 +553,7 @@ app.post('/deleteorder', checkAuthenticated, async (req, res) => {
         res.status(500).send('Failed to delete order: ' + err.message);
     }
 });
-app.get('/billing', checkAuthenticated, (req, res) => {
+app.get('/billing', checkAuthenticated, tenantMiddleware, (req, res) => {
     getBillPage(req, (err, result) => {
         res.render('bill.ejs', result)
     });
@@ -482,11 +570,12 @@ app.post('/fetchorderitem', checkAuthenticated, (req, res) => {
 
 
 // Submit bill endpoint - saves new order(s) from form submission - OPTIMIZED
-app.post('/submitbill', checkAuthenticated, async (req, res) => {
+app.post('/submitbill', checkAuthenticated, tenantMiddleware, async (req, res) => {
     const startTime = Date.now();
     try {
         console.log('=== /submitbill RECEIVED ===');
         
+        const db = getDbFromRequest(req);
         const ordersCollection = db.collection('orders');
         const mailCollection = db.collection('mail');
         const customerCollection = db.collection('customer');
@@ -719,7 +808,8 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
         });
     }
 });
-app.get('/edititem', checkAuthenticated, (req, res) => {
+app.get('/edititem', checkAuthenticated, tenantMiddleware, (req, res) => {
+    const db = getDbFromRequest(req);
     const ordersCollection = db.collection('orders');
     const customerCollection = db.collection("customer");
 
@@ -1086,7 +1176,8 @@ app.get('/export/csv', async (req, res) => {
 });
 
 
-app.post('/stock_filter_query', checkAuthenticated, async (req, res) => {
+app.post('/stock_filter_query', checkAuthenticated, tenantMiddleware, async (req, res) => {
+    const db = getDbFromRequest(req);
     const stockCollection = db.collection('stock');
     const filter_type = req.body && req.body.filter_type ? req.body.filter_type : (req.query && req.query.filter_type ? req.query.filter_type : undefined);
     if (filter_type === 'category') {
@@ -1806,7 +1897,7 @@ app.post('/unreturned', checkAuthenticated, (req, res) => {
     }
 });
 
-app.post('/sendmail', checkAuthenticated, async (req, res) => {
+app.post('/sendmail', checkAuthenticated, tenantMiddleware, async (req, res) => {
     fetchOrderItem(req, async (err, result) => {
         var orderDetails = result.rows;
         var htmlOrderTable = "";
@@ -1843,6 +1934,7 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
                 text: `Hi, ${customerName}`,
                 html: `<!DOCTYPE html PUBLIC'-//W3C//DTD XHTML 1.0 Transitional//EN''http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'><html xmlns='http://www.w3.org/1999/xhtml'xmlns:o='urn:schemas-microsoft-com:office:office'><head><meta charset='UTF-8'><meta content='width=device-width, initial-scale=1'name='viewport'><meta name='x-apple-disable-message-reformatting'><meta http-equiv='X-UA-Compatible'content='IE=edge'><meta content='telephone=no'name='format-detection'><title></title><!--[if(mso 16)]><style type='text/css'>a{text-decoration:none;}</style><![endif]--><!--[if gte mso 9]><style>sup{font-size:100%!important;}</style><![endif]--><!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG></o:AllowPNG><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]--></head><body><div class='es-wrapper-color'><!--[if gte mso 9]><v:background xmlns:v='urn:schemas-microsoft-com:vml'fill='t'><v:fill type='tile'color='#eeeeee'></v:fill></v:background><![endif]--><table class='es-wrapper'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-email-paddings'valign='top'><table cellpadding='0'cellspacing='0'class='es-content esd-header-popover'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7954'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p15t es-p15b es-p10r es-p10l'align='left'><!--[if mso]><table width='580'cellpadding='0'cellspacing='0'><tr><td width='282'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='esd-container-frame'width='282'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='es-infoblock esd-block-text es-m-txt-c'align='left'><p style='font-family: arial, helvetica\ neue, helvetica, sans-serif;'><br></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='278'valign='top'><![endif]--><table class='es-right'cellspacing='0'cellpadding='0'align='right'><tbody><tr><td class='esd-container-frame'width='278'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='right'class='es-infoblock esd-block-text es-m-txt-c'><p></p></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7681'align='center'><table class='es-header-body'style='background-color: #044767;'width='600'cellspacing='0'cellpadding='0'bgcolor='#044767'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><!--[if mso]><table width='530'cellpadding='0'cellspacing='0'><tr><td width='340'valign='top'><![endif]--><table class='es-left'cellspacing='0'cellpadding='0'align='left'><tbody><tr><td class='es-m-p0r es-m-p20b esd-container-frame'width='340'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-m-txt-c'align='left'><img src="https://i.imgur.com/b1IoAnu.png"><h1 style='color: #ffffff; line-height: 100%;'>Phoner</h1></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td><td width='20'></td><td width='170'valign='top'><![endif]--><table cellspacing='0'cellpadding='0'align='right'><tbody><tr class='es-hidden'><td class='es-m-p20b esd-container-frame'esd-custom-block-id='7704'width='170'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-spacer es-p5b'align='center'style='font-size:0'><table width='100%'height='100%'cellspacing='0'cellpadding='0'border='0'><tbody><tr><td style='border-bottom: 1px solid #044767; background: rgba(0, 0, 0, 0) none repeat scroll 0% 0%; height: 1px; width: 100%; margin: 0px;'></td></tr></tbody></table></td></tr><tr><td><table cellspacing='0'cellpadding='0'align='right'><tbody><tr><td align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text'align='right'><p>The Cycle Hub</p></td></tr></tbody></table></td><td class='esd-block-image es-p10l'valign='top'align='left'style='font-size:0'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><!--[if mso]></td></tr></table><![endif]--></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p40t es-p35b es-p35r es-p35l'esd-custom-block-id='7685'style='background-color: #f7f7f7;'bgcolor='#f7f7f7'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-image es-p20t es-p25b es-p35r es-p35l'align='center'style='font-size:0'></td></tr><tr><td class='esd-block-text es-p15b'align='center'><h2 style='color: #333333; font-family: 'open sans', 'helvetica neue', helvetica, arial, sans-serif;'>Thanks for your purchase</h2></td></tr><tr><td class='esd-block-text es-m-txt-l es-p20t'align='left'><h3 style='font-size: 18px;'>Hello ${customerName},</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='left'><p style='font-size: 16px; color: #777777;'>Please find the invoice below for your purchase</p></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p40t es-p40b es-p35r es-p35l'esd-custom-block-id='7685'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p20t'align='center'><h3 style='color: #333333;'>INVOICE</h3></td></tr><tr><td class='esd-block-text es-p15t es-p10b'align='center'><p style='font-size: 16px; color: #777777;'>INVOICE NUMBER: ${transactionId}</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'width='600'cellspacing='0'cellpadding='0'bgcolor='#ffffff'align='center'><tbody><tr><td class='esd-structure es-p20t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'bgcolor='#eeeeee'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>Order Confirmation#</h4></td><td width='20%'><h4>${invoiceNumber}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p10t es-p10b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody>${htmlOrderTable}</tbody></table></td></tr></tbody></table></td></tr><tr><td class='esd-structure es-p10t es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table style='border-top: 3px solid #eeeeee; border-bottom: 3px solid #eeeeee;'width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p15t es-p15b es-p10r es-p10l'align='left'><table style='width: 500px;'class='cke_show_border'cellspacing='1'cellpadding='1'border='0'align='left'><tbody><tr><td width='80%'><h4>TOTAL</h4></td><td width='20%'><h4>${total}</h4></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr></tr><tr><td class='esd-stripe'esd-custom-block-id='7797'align='center'><table class='es-content-body'style='background-color: #1b9ba3;'width='600'cellspacing='0'cellpadding='0'bgcolor='#1b9ba3'align='center'><tbody><tr><td class='esd-structure es-p35t es-p35b es-p35r es-p35l'align='left'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td width='530'align='left'class='esd-container-frame'><table cellpadding='0'cellspacing='0'width='100%'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='es-footer'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'esd-custom-block-id='7684'align='center'><table class='es-footer-body'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p35t es-p40b es-p35r es-p35l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='530'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-block-text es-p35b'align='center'><p><b>Keyur Gajjar</b></p></td></tr><tr><td esdev-links-color='#777777'align='left'class='esd-block-text es-m-txt-c es-p5b'><p style='color: #777777;'>Thanks your shooping and waiting for your next visit.</p></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table><table class='esd-footer-popover es-content'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-stripe'align='center'><table class='es-content-body'style='background-color: transparent;'width='600'cellspacing='0'cellpadding='0'align='center'><tbody><tr><td class='esd-structure es-p30t es-p30b es-p20r es-p20l'align='left'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td class='esd-container-frame'width='560'valign='top'align='center'><table width='100%'cellspacing='0'cellpadding='0'><tbody><tr><td align='center'class='esd-empty-container'style='display: none;'></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></td></tr></tbody></table></div></body></html>`,
             });
+            const db = getDbFromRequest(req);
             const mailCollection = db.collection('mail');
 
             const newMail = {
@@ -1916,11 +2008,12 @@ app.post('/sendmail', checkAuthenticated, async (req, res) => {
 //         });
 //     }
 // });
-app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
+app.post('/sendmailpdf', checkAuthenticated, tenantMiddleware, async (req, res) => {
     // If orderId is provided, fetch order and customer, generate invoice, and send mail
     const orderId = req.query.orderId || req.body.orderId;
     if (orderId) {
         try {
+            const db = getDbFromRequest(req);
             const ordersCollection = db.collection('orders');
             const customerCollection = db.collection('customer');
             const ObjectID = require('mongodb').ObjectID;
@@ -2050,7 +2143,8 @@ app.post('/sendmailpdf', checkAuthenticated, async (req, res) => {
 });
 
 // Edit stock item (GET)
-app.get('/editstock', checkAuthenticated, async (req, res) => {
+app.get('/editstock', checkAuthenticated, tenantMiddleware, async (req, res) => {
+    const db = getDbFromRequest(req);
     const stockCollection = db.collection('stocks');
     const ItemID = req.query.ItemID;
     const ItemName = req.query.ItemName;
@@ -2065,7 +2159,8 @@ app.get('/editstock', checkAuthenticated, async (req, res) => {
 });
 
 // Edit stock item (POST)
-app.post('/editstock', checkAuthenticated, async (req, res) => {
+app.post('/editstock', checkAuthenticated, tenantMiddleware, async (req, res) => {
+    const db = getDbFromRequest(req);
     const stockCollection = db.collection('stocks');
     const { ItemID, ItemName, Category, Brand, Size, Amount, StockDate, StockTime, orig_ItemID, orig_ItemName } = req.body;
     // Use original values for filter, allow changing ItemName

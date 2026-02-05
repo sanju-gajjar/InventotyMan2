@@ -1,9 +1,12 @@
+const { getDbFromRequest } = require('./db/db');
+
 function getUserRole(req) {
     const user = req.cookies.user;
     const role = req.cookies.role;
     return { user, role };
 }
 exports.getHomePage = function (req,callback) {
+    const db = getDbFromRequest(req);
     const stockCollection = db.collection('stocks');
     // Determine filter period
     const period = req.query.period || 'currentFY';
@@ -195,7 +198,8 @@ exports.getHomePage = function (req,callback) {
             lowStock,
             outOfStock,  // CRITICAL ALERT
             fastMoving,  // Fast-moving inventory
-            slowMoving   // Slow-moving inventory
+            slowMoving,   // Slow-moving inventory
+            tenant: req.tenant // Pass tenant info to view
           };
           callback(null, returnData);
         }).catch(err => {
@@ -206,6 +210,7 @@ exports.getHomePage = function (req,callback) {
     });
 }
 exports.getOrderPage = function (req, callback) { 
+    const db = getDbFromRequest(req);
     const ordersCollection = db.collection('orders');
     const customerCollection = db.collection('customer');
     // Pagination and search params
@@ -288,7 +293,8 @@ exports.getOrderPage = function (req, callback) {
 
 exports.getBarcodePage = function (req, callback) { 
     try {
-
+        const db = getDbFromRequest(req);        
+        //const db = getDbFromRequest(req);
         const brandsCollection = db.collection('brands');
 
         brandsCollection.find().toArray((err1, brands) => {
@@ -311,7 +317,8 @@ exports.getBarcodePage = function (req, callback) {
                     categories: categories.sort(),
                     display_content: 'None',
                     filter_type: 'None',
-                    filter_name: 'None'
+                    filter_name: 'None',
+                    tenant: req.tenant
                 };
                 callback(err2, result);
 
@@ -322,6 +329,7 @@ exports.getBarcodePage = function (req, callback) {
     }
 }
 exports.getViewStocks = function (req, callback) { 
+    const db = getDbFromRequest(req);
     const stockCollection = db.collection('stocks');
 
     stockCollection.find().sort({
@@ -360,7 +368,8 @@ exports.getViewStocks = function (req, callback) {
                     categories: categories.sort(),
                     display_content: 'None',
                     filter_type: 'None',
-                    filter_name: 'None'
+                    filter_name: 'None',
+                    tenant: req.tenant
                };
                 callback(err2, result);
             });

@@ -1,4 +1,5 @@
 const dbName = 'inventoryman';
+const { getDbFromRequest } = require('./db/db');
 
 function getUserRole(req) {
     const user = req.cookies.user;
@@ -6,6 +7,7 @@ function getUserRole(req) {
     return { user, role };
 }
 exports.getBillPage = function (req, callback) { 
+    const db = getDbFromRequest(req);
     const categoryCollection = db.collection('categories');
     const brandCollection = db.collection('brands');
     const sizeCollection = db.collection('sizes');
@@ -51,7 +53,8 @@ exports.getBillPage = function (req, callback) {
                 user: getUserRole(req),
                 category: category,
                 brand: brand,
-                size: size
+                size: size,
+                tenant: req.tenant
             };
             callback(null, result)
         })
@@ -62,6 +65,7 @@ exports.getBillPage = function (req, callback) {
 
 exports.submitBill = function (req, callback) { 
 
+    const db = getDbFromRequest(req);
     const ordersCollection = db.collection('orders');
     const stockCollection = db.collection('stocks');
     const customerCollection = db.collection('customer');
@@ -297,6 +301,7 @@ const generateReceiptNumber = () => {
 };
 
 exports.fetchOrderItem = function (req, callback) { 
+    const db = getDbFromRequest(req);
     const stockCollection = db.collection('orders');
 
     const item_id = req.body.itemid.toString().split('\n')[0];
