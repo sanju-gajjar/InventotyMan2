@@ -540,7 +540,8 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
         const tDay = now.getDate();
         const tMonth = now.getMonth() + 1;
         const tYear = now.getFullYear();
-        const userRole = getUserRole(req);
+        const userRoleData = getUserRole(req);
+        const userRole = userRoleData?.user || 'Unknown';
         
         // OPTIMIZATION 2: Parse products more efficiently
         const products = [];
@@ -601,8 +602,8 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
                 CreatedAt: now
             });
 
-            totalAmount += amount;
-            htmlOrderTable += `<tr><td style="padding: 5px 10px 5px 0" width="80%" align="left"><p>${itemName} (Qty: ${quantity})</p></td><td style="padding: 5px 0" width="20%" align="left"><p>₹${amount}</p></td></tr>`;
+            totalAmount += finalAmount;
+            htmlOrderTable += `<tr><td style="padding: 5px 10px 5px 0" width="80%" align="left"><p>${itemName} (Qty: ${quantity})</p></td><td style="padding: 5px 0" width="20%" align="left"><p>₹${finalAmount.toFixed(2)}</p></td></tr>`;
         }
 
         // Check and insert new categories/brands if not present
@@ -663,7 +664,7 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
             success: true,
             message: 'Bill submitted successfully',
             transactionId: transactionId,
-            total: totalAmount
+            total: parseFloat(totalAmount.toFixed(2))
         });
         
         // OPTIMIZATION 5: Send email in background (non-blocking)
@@ -691,7 +692,7 @@ app.post('/submitbill', checkAuthenticated, async (req, res) => {
                         to: customerEmail,
                         subject: `Thank you for shopping at Phoner #Invoice: ${transactionId}`,
                         text: `Hi, ${customerName}`,
-                        html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Invoice</title></head><body style="margin:0;padding:0;font-family:Arial,sans-serif;color:#333;"><div style="max-width:700px;margin:20px auto;padding:20px;border:1px solid #e0e0e0;border-radius:8px;"><div style="text-align:center;margin-bottom:20px;"><h1 style="margin:0;font-size:28px;">The Phoner Hub</h1><p style="margin:5px 0;font-size:14px;color:#555;">Mobile Accessories &amp; More</p></div><hr style="border:none;border-top:1px solid #e0e0e0;margin:15px 0;"><h2 style="margin:0 0 10px 0;font-size:20px;">Invoice</h2><p style="margin:0 0 5px 0;font-size:14px;"><strong>Customer:</strong> ${customerName}</p><p style="margin:0 0 15px 0;font-size:14px;"><strong>Invoice No:</strong> ${transactionId}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Item</th><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Amount</th></tr></thead><tbody>${htmlOrderTable}</tbody></table><h3 style="text-align:right;margin-top:15px;font-size:18px;">Total: ₹${totalAmount}</h3><p style="margin-top:20px;font-size:13px;color:#555;">Thank you for shopping with us!</p><p style="margin:5px 0 0 0;font-size:12px;color:#777;"><strong>The Phoner Hub</strong><br>Shop No: G-101, B.T. Mall, Navjivan Mall Compound, Kalol-382721<br>Dist-Gandhinagar | Contact: 7600004841</p></div></body></html>`
+                        html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Invoice</title></head><body style="margin:0;padding:0;font-family:Arial,sans-serif;color:#333;"><div style="max-width:700px;margin:20px auto;padding:20px;border:1px solid #e0e0e0;border-radius:8px;"><div style="text-align:center;margin-bottom:20px;"><h1 style="margin:0;font-size:28px;">The Phoner Hub</h1><p style="margin:5px 0;font-size:14px;color:#555;">Mobile Accessories &amp; More</p></div><hr style="border:none;border-top:1px solid #e0e0e0;margin:15px 0;"><h2 style="margin:0 0 10px 0;font-size:20px;">Invoice</h2><p style="margin:0 0 5px 0;font-size:14px;"><strong>Customer:</strong> ${customerName}</p><p style="margin:0 0 15px 0;font-size:14px;"><strong>Invoice No:</strong> ${transactionId}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Item</th><th style="padding:10px;border:1px solid #ccc;background:#f5f5f5;">Amount</th></tr></thead><tbody>${htmlOrderTable}</tbody></table><h3 style="text-align:right;margin-top:15px;font-size:18px;">Total: ₹${totalAmount.toFixed(2)}</h3><p style="margin-top:20px;font-size:13px;color:#555;">Thank you for shopping with us!</p><p style="margin:5px 0 0 0;font-size:12px;color:#777;"><strong>The Phoner Hub</strong><br>Shop No: G-101, B.T. Mall, Navjivan Mall Compound, Kalol-382721<br>Dist-Gandhinagar | Contact: 7600004841</p></div></body></html>`
                     });
                     
                     await mailCollection.insertOne({
