@@ -146,7 +146,7 @@
         <div class="category-card">
             <span class="category-name"><%= cat.Category %></span>
             <form action="/deletecategory" method="POST" style="display: inline;" onsubmit="return confirm('Delete this category?');">
-                <input type="hidden" name="category" value="<%= cat.Category %>">
+                <input type="hidden" name="deleteid" value="<%= cat.Category %>">
                 <button type="submit" class="btn-delete">
                     <i class="material-icons">delete</i>
                 </button>

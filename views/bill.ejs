@@ -9,6 +9,8 @@
     <style>
         .billing-page {
             width: 100%;
+            max-width: 1920px;
+            margin: 0 auto;
             padding: 0;
         }
 
@@ -37,6 +39,7 @@
             margin-bottom: 24px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             overflow: visible;
+            max-width: 100%;
         }
 
         .card-title {
@@ -89,14 +92,37 @@
         }
 
         .table-responsive {
-            overflow: visible;
+            overflow-x: auto;
+            overflow-y: visible;
             margin-top: 20px;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+        }
+
+        /* Scrollbar styling for table */
+        .table-responsive::-webkit-scrollbar {
+            height: 10px;
+        }
+
+        .table-responsive::-webkit-scrollbar-track {
+            background: var(--gray-100);
+            border-radius: 10px;
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 10px;
+        }
+
+        .table-responsive::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-dark);
         }
 
         .product-table {
             width: 100%;
+            min-width: 1200px;
             border-collapse: collapse;
-            table-layout: fixed;
+            table-layout: auto;
         }
 
         .product-table th:nth-child(1) { width: 40px; } /* Sr */
@@ -210,6 +236,7 @@
             display: grid;
             grid-template-columns: 1fr 400px;
             gap: 32px;
+            width: 100%;
         }
 
         .bill-options-section,
@@ -470,15 +497,67 @@
             transform: translateX(calc(100% + 4px));
         }
 
-        @media (max-width: 1024px) {
+        @media (max-width: 1600px) {
+            .product-table {
+                min-width: 1400px;
+            }
+            .billing-page {
+                padding: 0 10px;
+            }
+        }
+
+        @media (max-width: 1400px) {
+            .billing-card {
+                padding: 20px;
+            }
+            .product-table {
+                min-width: 1200px;
+                font-size: 12px;
+            }
+            .product-table input {
+                padding: 8px 6px;
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 1200px) {
             .summary-options-container {
                 grid-template-columns: 1fr;
+                gap: 24px;
+            }
+            .form-grid[style*="grid-template-columns: 1fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+            .summary-section {
+                max-width: 500px;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .form-grid {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             }
         }
 
         @media (max-width: 768px) {
             .form-grid {
                 grid-template-columns: 1fr;
+            }
+            .billing-card {
+                padding: 16px;
+            }
+            .page-header {
+                padding: 16px;
+            }
+            .page-header h1 {
+                font-size: 22px;
+            }
+            .product-table {
+                min-width: 1000px;
+                font-size: 11px;
+            }
+            .card-title {
+                font-size: 16px;
             }
         }
 
@@ -501,18 +580,6 @@
             background: #fee2e2;
             border: 2px solid #fca5a5;
             color: #991b1b;
-        }
-
-        @media (max-width: 1024px) {
-            .summary-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
         }
     </style>
 

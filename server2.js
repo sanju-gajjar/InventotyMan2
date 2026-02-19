@@ -268,7 +268,7 @@ app.post('/login', async (req, res) => {
             username: user.username,
             sub: user.role
         }, secretKey, {
-            expiresIn: '1h',
+            expiresIn: '30m',
         });
         res.cookie('token', token);
         res.cookie('user', email);
