@@ -8,6 +8,10 @@
                     <% 
                         const now = new Date();
                         const currentFY = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+                        // Set default period to current fiscal year if not defined
+                        if (typeof period === 'undefined' || !period) {
+                            period = 'fy' + currentFY;
+                        }
                         for (let fy = currentFY; fy >= currentFY - 3; fy--) {
                     %>
                         <option value="fy<%= fy %>" <%= period === ('fy' + fy) ? 'selected' : '' %>>FY <%= fy - 1 %>-<%= fy %></option>
